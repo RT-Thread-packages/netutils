@@ -1,7 +1,5 @@
 # Ping
 
----
-
 ## 1、介绍
 
 [ping](https://baike.baidu.com/item/ping/6235) 是一种网络工具，用来测试数据包能否通过 IP 协议到达特定主机。估算与主机间的丢失数据包率（丢包率）和数据包往返时间（网络时延，Round-trip delay time）。
