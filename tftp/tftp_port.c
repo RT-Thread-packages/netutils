@@ -22,7 +22,6 @@
  * 2017-08-17     armink       first version.
  */
 
-
 #include <rtthread.h>
 #include <dfs_posix.h>
 #include <lwip/apps/tftp_server.h>
