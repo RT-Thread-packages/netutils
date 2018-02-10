@@ -28,7 +28,7 @@ msh />
 
 - 1、选择 `Tftp Client` ；
 - 2、在 `Server interfaces` 下拉框中，务必选择好与 RT-Thread 处于同一网段的网卡；
-- 3、填写 TFTP 服务器的 IP 地址。可以使用 `ifconfig` 命令查看；
+- 3、填写 TFTP 服务器的 IP 地址。可以在 RT-Thread 的 MSH 下使用 `ifconfig` 命令查看；
 - 4、填写 TFTP 服务器端口号，默认： `69` 
 
 ![tftpd_cfg](../images/tftpd_cfg.png)
