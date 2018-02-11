@@ -1,7 +1,7 @@
 /*
  *
  * (C) 2014 David Lettier.
- * (C) 2017 Armink (armink.ztl@gmail.com)
+ * (C) 2018 Armink (armink.ztl@gmail.com)
  *
  * http://www.lettier.com/
  *
@@ -22,18 +22,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <rtthread.h>
 
-#define NTP_TIMESTAMP_DELTA 2208988800ull
-#define NTP_GET_TIMEOUT     10
+#ifdef NETUTILS_NTP_TIMEZONE
+#define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
+#endif
 
-#ifndef NTP_TIMEZONE_DEAULT
-#define NTP_TIMEZONE_DEAULT 8
+#ifdef NETUTILS_NTP_HOSTNAME
+#define NTP_HOSTNAME                   NETUTILS_NTP_HOSTNAME
+#endif
+
+#define NTP_TIMESTAMP_DELTA            2208988800ull
+#define NTP_GET_TIMEOUT                10
+
+#ifndef NTP_TIMEZONE
+#define NTP_TIMEZONE                   8
+#endif
+
+#ifndef NTP_HOSTNAME
+#define NTP_HOSTNAME                   "cn.pool.ntp.org"
 #endif
 
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
@@ -72,20 +83,31 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static void error(char* msg)
+static void ntp_error(char* msg)
 {
-    printf("[NTP]: %s\n", msg); // Print the error message to stderr.
+    rt_kprintf("\033[31;22m[E/NTP]: ERROR %s\033[0m\n", msg); // Print the error message to stderr.
 }
 
-void ntp( int argc, char* argv[])
+/**
+ * Get the UTC time from NTP server
+ *
+ * @note this function is not reentrant
+ *
+ * @return >0: success, current UTC time
+ *         =0: get failed
+ */
+time_t ntp_get_time(void)
 {
     int sockfd, n; // Socket file descriptor and the n return result from writing/reading from the socket.
 
     int portno = 123; // NTP UDP port number.
 
-    char* host_name = "cn.pool.ntp.org"; // NTP server host-name.
+    char* host_name = NTP_HOSTNAME; // NTP server host-name.
 
-    struct tm time_new;
+    time_t new_time = 0;
+
+    fd_set readset;
+    struct timeval timeout;
 
     // Create and zero out the packet. All 48 bytes worth.
 
@@ -104,14 +126,14 @@ void ntp( int argc, char* argv[])
     sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP); // Create a UDP socket.
 
     if (sockfd < 0) {
-        error("ERROR opening socket");
+        ntp_error("opening socket");
         goto __exit;
     }
 
     server = gethostbyname(host_name); // Convert URL to IP.
 
     if (server == NULL) {
-        error("ERROR, no such host");
+        ntp_error("no such host");
         goto __exit;
     }
 
@@ -132,7 +154,7 @@ void ntp( int argc, char* argv[])
     // Call up the server using its IP address and port number.
 
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-        error("ERROR connecting");
+        ntp_error("connecting");
         goto __exit;
     }
 
@@ -141,12 +163,10 @@ void ntp( int argc, char* argv[])
     n = write(sockfd, (char*) &packet, sizeof(ntp_packet));
 
     if (n < 0) {
-        error("ERROR writing to socket");
+        ntp_error("writing to socket");
         goto __exit;
     }
 
-    fd_set readset;
-    struct timeval timeout;
     timeout.tv_sec = NTP_GET_TIMEOUT;
     timeout.tv_usec = 0;
 
@@ -154,7 +174,7 @@ void ntp( int argc, char* argv[])
     FD_SET(sockfd, &readset);
 
     if (select(sockfd + 1, &readset, RT_NULL, RT_NULL, &timeout) <= 0) {
-        error("ERROR select the socket timeout(10s)");
+        ntp_error("select the socket timeout(10s)");
         goto __exit;
     }
 
@@ -163,7 +183,7 @@ void ntp( int argc, char* argv[])
     n = read(sockfd, (char*) &packet, sizeof(ntp_packet));
 
     if (n < 0) {
-        error("ERROR reading from socket");
+        ntp_error("reading from socket");
         goto __exit;
     }
 
@@ -179,33 +199,68 @@ void ntp( int argc, char* argv[])
     // This leaves the seconds since the UNIX epoch of 1970.
     // (1900)------------------(1970)**************************************(Time Packet Left the Server)
 
-    time_t txTm = (time_t) (packet.txTm_s - NTP_TIMESTAMP_DELTA);
-
-    // Print the time we got from the server, accounting for local timezone and conversion from UTC time.
-
-    printf("NTP Server Time: %s", ctime((const time_t*) &txTm));
-
-    /* add the timezone offset for set_time/set_date */
-    txTm += NTP_TIMEZONE_DEAULT * 3600;
-
-    localtime_r(&txTm, &time_new);
-
-#ifdef RT_USING_RTC
-    set_time(time_new.tm_hour, time_new.tm_min, time_new.tm_sec);
-    set_date(time_new.tm_year + 1900, time_new.tm_mon + 1, time_new.tm_mday);
-#endif
-
-    printf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE_DEAULT);
+    new_time = (time_t) (packet.txTm_s - NTP_TIMESTAMP_DELTA);
 
 __exit:
 
     close(sockfd);
+
+    return new_time;
 }
+
+/**
+ * Get the local time from NTP server
+ *
+ * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
+ *         =0: get failed
+ */
+time_t ntp_get_local_time(void)
+{
+    time_t cur_time = ntp_get_time();
+
+    if (cur_time)
+    {
+        /* add the timezone offset for set_time/set_date */
+        cur_time += NTP_TIMEZONE * 3600;
+    }
+
+    return cur_time;
+}
+
+#ifdef RT_USING_RTC
+/**
+ * Sync current local time to RTC by NTP
+ *
+ * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
+ *         =0: sync failed
+ */
+time_t ntp_sync_to_rtc(void)
+{
+    struct tm cur_tm;
+    time_t cur_time = ntp_get_local_time();
+
+    if (cur_time)
+    {
+        set_time(cur_tm.tm_hour, cur_tm.tm_min, cur_tm.tm_sec);
+        set_date(cur_tm.tm_year + 1900, cur_tm.tm_mon + 1, cur_tm.tm_mday);
+    }
+
+    return cur_time;
+}
+
+void cmd_ntp_sync(void)
+{
+    time_t cur_time = ntp_sync_to_rtc();
+
+    if (cur_time)
+    {
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
+        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
+    }
+}
+
 #ifdef RT_USING_FINSH
 #include <finsh.h>
-FINSH_FUNCTION_EXPORT(ntp, Update time by NTP(Network Time Protocol));
-#ifdef FINSH_USING_MSH
-MSH_CMD_EXPORT(ntp, Update time by NTP(Network Time Protocol));
-#endif /* FINSH_USING_MSH */
+FINSH_FUNCTION_EXPORT_ALIAS(cmd_ntp_sync, __cmd_ntp_sync, Update time by NTP(Network Time Protocol));
 #endif /* RT_USING_FINSH */
-
+#endif /* RT_USING_RTC */

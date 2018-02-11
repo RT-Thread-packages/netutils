@@ -59,8 +59,8 @@
 /**
  * TFTP server port
  */
-#if defined PKG_NETUTILS_TFTP_PORT
-#define TFTP_PORT             PKG_NETUTILS_TFTP_PORT
+#if defined NETUTILS_TFTP_PORT
+#define TFTP_PORT             NETUTILS_TFTP_PORT
 #elif !defined TFTP_PORT
 #define TFTP_PORT             69
 #endif
