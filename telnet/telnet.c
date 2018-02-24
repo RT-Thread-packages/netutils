@@ -1,14 +1,46 @@
+/*
+ * File      : telnet.c
+ * This file is part of RT-Thread RTOS
+ * COPYRIGHT (C) 2006-2018, RT-Thread Development Team
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Change Logs:
+ * Date           Author       Notes
+ * 2012-04-01     Bernard      first version
+ * 2018-01-25     armink       Fix it on RT-Thread 3.0+
+ */
 #include <rtthread.h>
-#include <lwip/api.h>
-#include <lwip/sockets.h>
 #include <rtdevice.h>
 
-#include <finsh.h>
-#include <shell.h>
+#ifdef RT_USING_DFS_NET
+#include <sys/socket.h>
+#else
+#include <lwip/sockets.h>
+#endif /* RT_USING_DFS_NET */
 
-#if RTTHREAD_VERSION >= 30000
-#error "not supported, I hope you can fix it"
+#if defined(RT_USING_POSIX)
+#include <dfs_posix.h>
+#include <dfs_poll.h>
+#include <libc.h>
+static int dev_old_flag;
 #endif
+
+#include <finsh.h>
+#include <msh.h>
+#include <shell.h>
 
 #define TELNET_PORT         23
 #define TELNET_BACKLOG      5
@@ -48,6 +80,7 @@ struct telnet_session
     rt_uint8_t state;
     rt_uint8_t echo_mode;
 
+    rt_sem_t read_notice;
 };
 
 static struct telnet_session* telnet;
@@ -95,11 +128,11 @@ static void send_option_to_client(struct telnet_session* telnet, rt_uint8_t opti
 /* process rx data */
 static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_t length)
 {
-    rt_size_t rx_length, index;
+    rt_size_t index;
 
-    for (index = 0; index < length; index ++)
+    for (index = 0; index < length; index++)
     {
-        switch(telnet->state)
+        switch (telnet->state)
         {
         case STATE_IAC:
             if (*data == TELNET_IAC)
@@ -116,23 +149,33 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
                 /* set telnet state according to received package */
                 switch (*data)
                 {
-                case TELNET_WILL: telnet->state = STATE_WILL; break;
-                case TELNET_WONT: telnet->state = STATE_WONT; break;
-                case TELNET_DO:   telnet->state = STATE_DO; break;
-                case TELNET_DONT: telnet->state = STATE_DONT; break;
-                default: telnet->state = STATE_NORMAL; break;
+                case TELNET_WILL:
+                    telnet->state = STATE_WILL;
+                    break;
+                case TELNET_WONT:
+                    telnet->state = STATE_WONT;
+                    break;
+                case TELNET_DO:
+                    telnet->state = STATE_DO;
+                    break;
+                case TELNET_DONT:
+                    telnet->state = STATE_DONT;
+                    break;
+                default:
+                    telnet->state = STATE_NORMAL;
+                    break;
                 }
             }
             break;
 
-        /* don't option */
+            /* don't option */
         case STATE_WILL:
         case STATE_WONT:
             send_option_to_client(telnet, TELNET_DONT, *data);
             telnet->state = STATE_NORMAL;
             break;
 
-        /* won't option */
+            /* won't option */
         case STATE_DO:
         case STATE_DONT:
             send_option_to_client(telnet, TELNET_WONT, *data);
@@ -140,20 +183,26 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
             break;
 
         case STATE_NORMAL:
-            if (*data == TELNET_IAC) telnet->state = STATE_IAC;
+            if (*data == TELNET_IAC)
+            {
+                telnet->state = STATE_IAC;
+            }
             else if (*data != '\r') /* ignore '\r' */
             {
                 rt_mutex_take(telnet->rx_ringbuffer_lock, RT_WAITING_FOREVER);
                 /* put buffer to ringbuffer */
                 rt_ringbuffer_putchar(&(telnet->rx_ringbuffer), *data);
                 rt_mutex_release(telnet->rx_ringbuffer_lock);
+                rt_sem_release(telnet->read_notice);
             }
             break;
         }
-
-        data ++;
+        data++;
     }
 
+
+#if !defined(RT_USING_POSIX)
+    rt_size_t rx_length;
     rt_mutex_take(telnet->rx_ringbuffer_lock, RT_WAITING_FOREVER);
     /* get total size */
     rx_length = rt_ringbuffer_data_len(&telnet->rx_ringbuffer);
@@ -161,7 +210,10 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
 
     /* indicate there are reception data */
     if ((rx_length > 0) && (telnet->device.rx_indicate != RT_NULL))
+    {
         telnet->device.rx_indicate(&telnet->device, rx_length);
+    }
+#endif
 
     return;
 }
@@ -172,15 +224,21 @@ static void client_close(struct telnet_session* telnet)
     /* set console */
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
     /* set finsh device */
+#if defined(RT_USING_POSIX)
+    ioctl(libc_stdio_get_console(), F_SETFL, (void *) dev_old_flag);
+    libc_stdio_set_console(RT_CONSOLE_DEVICE_NAME, O_RDWR);
+    rt_sem_release(telnet->read_notice);
+#else
     finsh_set_device(RT_CONSOLE_DEVICE_NAME);
+#endif /* RT_USING_POSIX */
 
     /* close connection */
-    closesocket(telnet->client_fd);
+    close(telnet->client_fd);
 
     /* restore shell option */
     finsh_set_echo(telnet->echo_mode);
 
-    rt_kprintf("resume console to %s\n", RT_CONSOLE_DEVICE_NAME);
+    rt_kprintf("telnet: resume console to %s\n", RT_CONSOLE_DEVICE_NAME);
 }
 
 /* RT-Thread Device Driver Interface */
@@ -202,6 +260,8 @@ static rt_err_t telnet_close(rt_device_t dev)
 static rt_size_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
 {
     rt_size_t result;
+
+    rt_sem_take(telnet->read_notice, RT_WAITING_FOREVER);
 
     /* read from rx ring buffer */
     rt_mutex_take(telnet->rx_ringbuffer_lock, RT_WAITING_FOREVER);
@@ -261,7 +321,7 @@ static void telnet_thread(void* parameter)
     addr.sin_port = htons(TELNET_PORT);
     addr.sin_addr.s_addr = INADDR_ANY;
     rt_memset(&(addr.sin_zero), 0, sizeof(addr.sin_zero));
-    if (bind(telnet->server_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr)) == -1)
+    if (bind(telnet->server_fd, (struct sockaddr *) &addr, sizeof(struct sockaddr)) == -1)
     {
         rt_kprintf("telnet: bind socket failed\n");
         return;
@@ -286,26 +346,42 @@ static void telnet_thread(void* parameter)
     telnet->device.user_data = RT_NULL;
 
     /* register telnet device */
-    rt_device_register(&telnet->device, "telnet",
-                       RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_STREAM);
+    rt_device_register(&telnet->device, "telnet", RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_STREAM);
 
     while (1)
     {
-        rt_kprintf("telnet server waiting for connection\n");
+        rt_kprintf("telnet: waiting for connection\n");
 
         /* grab new connection */
-        if ((telnet->client_fd = accept(telnet->server_fd, (struct sockaddr * )&addr, &addr_size)) == -1)
+        if ((telnet->client_fd = accept(telnet->server_fd, (struct sockaddr *) &addr, &addr_size)) == -1)
         {
             continue;
         }
 
-        rt_kprintf("new telnet client(%s:%d) connection, switch console to telnet...\n", inet_ntoa(addr.sin_addr), addr.sin_port);
+        rt_kprintf("telnet: new telnet client(%s:%d) connection, switch console to telnet...\n", inet_ntoa(addr.sin_addr), addr.sin_port);
 
         /* process the new connection */
         /* set console */
         rt_console_set_device("telnet");
         /* set finsh device */
+#if defined(RT_USING_POSIX)
+        /* backup flag */
+        dev_old_flag = ioctl(libc_stdio_get_console(), F_GETFL, (void *) RT_NULL);
+        /* add non-block flag */
+        ioctl(libc_stdio_get_console(), F_SETFL, (void *) (dev_old_flag | O_NONBLOCK));
+        /* set tcp shell device for console */
+        libc_stdio_set_console("telnet", O_RDWR);
+        /* resume finsh thread, make sure it will unblock from last device receive */
+        rt_thread_t tid = rt_thread_find(FINSH_THREAD_NAME);
+        if (tid)
+        {
+            rt_thread_resume(tid);
+            rt_schedule();
+        }
+#else
+        /* set finsh device */
         finsh_set_device("telnet");
+#endif /* RT_USING_POSIX */
 
         /* set init state */
         telnet->state = STATE_NORMAL;
@@ -313,6 +389,9 @@ static void telnet_thread(void* parameter)
         telnet->echo_mode = finsh_get_echo();
         /* disable echo mode */
         finsh_set_echo(0);
+        /* output RT-Thread version and shell prompt */
+        msh_exec("version", strlen("version"));
+        rt_kprintf(FINSH_PROMPT);
 
         while (1)
         {
@@ -335,7 +414,7 @@ static void telnet_thread(void* parameter)
 }
 
 /* telnet server */
-void telnet_srv(void)
+void telnet_server(void)
 {
     rt_thread_t tid;
 
@@ -375,21 +454,26 @@ void telnet_srv(void)
         /* create rx ringbuffer lock */
         telnet->rx_ringbuffer_lock = rt_mutex_create("telnet_rx", RT_IPC_FLAG_FIFO);
 
+        telnet->read_notice = rt_sem_create("telnet_rx", 0, RT_IPC_FLAG_FIFO);
+
         tid = rt_thread_create("telnet", telnet_thread, RT_NULL, 2048, 25, 5);
         if (tid != RT_NULL)
+        {
             rt_thread_startup(tid);
+            rt_kprintf("Telnet server start successfully\n");
+        }
     }
     else
     {
-        rt_kprintf("telnet: already running\n");
+        rt_kprintf("telnet: server already running\n");
     }
 
 }
 
 #ifdef RT_USING_FINSH
 #include <finsh.h>
-FINSH_FUNCTION_EXPORT(telnet_srv, startup telnet server);
+FINSH_FUNCTION_EXPORT(telnet_server, startup telnet server);
 #ifdef FINSH_USING_MSH
-MSH_CMD_EXPORT(telnet_srv, startup telnet server)
+MSH_CMD_EXPORT(telnet_server, startup telnet server)
 #endif /* FINSH_USING_MSH */
 #endif /* RT_USING_FINSH */
