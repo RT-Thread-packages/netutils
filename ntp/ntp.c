@@ -243,6 +243,7 @@ time_t ntp_sync_to_rtc(void)
     {
         cur_tm = localtime(&cur_time);
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
+        cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
     }
 
