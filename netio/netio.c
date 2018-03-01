@@ -418,12 +418,23 @@ netio_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 
 void netio_init(void)
 {
+    static rt_bool_t init_ok = RT_FALSE;
     struct tcp_pcb *pcb;
 
-    pcb = tcp_new();
-    tcp_bind(pcb, IP_ADDR_ANY, 18767);
-    pcb = tcp_listen(pcb);
-    tcp_accept(pcb, netio_accept);
+    if (!init_ok)
+    {
+
+        pcb = tcp_new();
+        tcp_bind(pcb, IP_ADDR_ANY, 18767);
+        pcb = tcp_listen(pcb);
+        tcp_accept(pcb, netio_accept);
+        init_ok = RT_TRUE;
+        rt_kprintf("NetIO server start successfully\n");
+    }
+    else
+    {
+        rt_kprintf("netio: server already running\n");
+    }
 }
 
 #endif /* LWIP_TCP */
