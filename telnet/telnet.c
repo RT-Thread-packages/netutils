@@ -390,7 +390,9 @@ static void telnet_thread(void* parameter)
         /* disable echo mode */
         finsh_set_echo(0);
         /* output RT-Thread version and shell prompt */
+#ifdef FINSH_USING_MSH
         msh_exec("version", strlen("version"));
+#endif
         rt_kprintf(FINSH_PROMPT);
 
         while (1)
