@@ -18,12 +18,12 @@
  *
  */
 
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <rtthread.h>
@@ -102,7 +102,7 @@ time_t ntp_get_time(void)
 
     int portno = 123; // NTP UDP port number.
 
-    char* host_name = NTP_HOSTNAME; // NTP server host-name.
+    char *host_name = NTP_HOSTNAME; // NTP server host-name.
 
     time_t new_time = 0;
 
@@ -127,7 +127,7 @@ time_t ntp_get_time(void)
 
     if (sockfd < 0) {
         ntp_error("opening socket");
-        goto __exit;
+        return 0;
     }
 
     server = gethostbyname(host_name); // Convert URL to IP.
@@ -160,7 +160,7 @@ time_t ntp_get_time(void)
 
     // Send it the NTP packet it wants. If n == -1, it failed.
 
-    n = write(sockfd, (char*) &packet, sizeof(ntp_packet));
+    n = send(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
 
     if (n < 0) {
         ntp_error("writing to socket");
@@ -180,7 +180,7 @@ time_t ntp_get_time(void)
 
     // Wait and receive the packet back from the server. If n == -1, it failed.
 
-    n = read(sockfd, (char*) &packet, sizeof(ntp_packet));
+    n = recv(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
 
     if (n < 0) {
         ntp_error("reading from socket");
@@ -203,7 +203,7 @@ time_t ntp_get_time(void)
 
 __exit:
 
-    close(sockfd);
+    closesocket(sockfd);
 
     return new_time;
 }
