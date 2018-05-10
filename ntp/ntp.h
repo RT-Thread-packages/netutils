@@ -29,27 +29,33 @@
 /**
  * Get the UTC time from NTP server
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @note this function is not reentrant
  *
  * @return >0: success, current UTC time
  *         =0: get failed
  */
-time_t ntp_get_time(void);
+time_t ntp_get_time(const char *host_name);
 
 /**
  * Get the local time from NTP server
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
  *         =0: get failed
  */
-time_t ntp_get_local_time(void);
+time_t ntp_get_local_time(const char *host_name);
 
 /**
  * Sync current local time to RTC by NTP
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
  *         =0: sync failed
  */
-time_t ntp_sync_to_rtc(void);
+time_t ntp_sync_to_rtc(const char *host_name);
 
 #endif /* _NTP_H_ */

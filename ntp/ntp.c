@@ -91,23 +91,29 @@ static void ntp_error(char* msg)
 /**
  * Get the UTC time from NTP server
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @note this function is not reentrant
  *
  * @return >0: success, current UTC time
  *         =0: get failed
  */
-time_t ntp_get_time(void)
+time_t ntp_get_time(const char *host_name)
 {
     int sockfd, n; // Socket file descriptor and the n return result from writing/reading from the socket.
 
     int portno = 123; // NTP UDP port number.
 
-    char *host_name = NTP_HOSTNAME; // NTP server host-name.
-
     time_t new_time = 0;
 
     fd_set readset;
     struct timeval timeout;
+
+    // Using default host name when host_name is NULL
+    if (host_name == NULL)
+    {
+        host_name = NTP_HOSTNAME;
+    }
 
     // Create and zero out the packet. All 48 bytes worth.
 
@@ -211,12 +217,14 @@ __exit:
 /**
  * Get the local time from NTP server
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
  *         =0: get failed
  */
-time_t ntp_get_local_time(void)
+time_t ntp_get_local_time(const char *host_name)
 {
-    time_t cur_time = ntp_get_time();
+    time_t cur_time = ntp_get_time(host_name);
 
     if (cur_time)
     {
@@ -231,13 +239,15 @@ time_t ntp_get_local_time(void)
 /**
  * Sync current local time to RTC by NTP
  *
+ * @param host_name NTP server host name, NULL: will using default host name
+ *
  * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
  *         =0: sync failed
  */
-time_t ntp_sync_to_rtc(void)
+time_t ntp_sync_to_rtc(const char *host_name)
 {
     struct tm *cur_tm;
-    time_t cur_time = ntp_get_local_time();
+    time_t cur_time = ntp_get_local_time(host_name);
 
     if (cur_time)
     {
@@ -250,9 +260,17 @@ time_t ntp_sync_to_rtc(void)
     return cur_time;
 }
 
-void cmd_ntp_sync(void)
+void cmd_ntp_sync(int argc, char **argv)
 {
-    time_t cur_time = ntp_sync_to_rtc();
+    time_t cur_time = NULL;
+    char *host_name = NULL;
+
+    if (argc > 1)
+    {
+        host_name = argv[1];
+    }
+
+    cur_time = ntp_sync_to_rtc(host_name);
 
     if (cur_time)
     {
@@ -263,6 +281,6 @@ void cmd_ntp_sync(void)
 
 #ifdef RT_USING_FINSH
 #include <finsh.h>
-FINSH_FUNCTION_EXPORT_ALIAS(cmd_ntp_sync, __cmd_ntp_sync, Update time by NTP(Network Time Protocol));
+FINSH_FUNCTION_EXPORT_ALIAS(cmd_ntp_sync, __cmd_ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
 #endif /* RT_USING_RTC */
