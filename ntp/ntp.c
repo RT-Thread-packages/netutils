@@ -37,14 +37,14 @@
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
-#define NTP_GET_TIMEOUT                10
+#define NTP_GET_TIMEOUT                5
 
 #ifndef NTP_TIMEZONE
 #define NTP_TIMEZONE                   8
 #endif
 
 #ifndef NTP_HOSTNAME
-#define NTP_HOSTNAME                   "cn.pool.ntp.org"
+#define NTP_HOSTNAME                   "cn.ntp.org.cn"
 #endif
 
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
