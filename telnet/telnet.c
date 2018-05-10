@@ -266,6 +266,15 @@ static rt_size_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_siz
     /* read from rx ring buffer */
     rt_mutex_take(telnet->rx_ringbuffer_lock, RT_WAITING_FOREVER);
     result = rt_ringbuffer_get(&(telnet->rx_ringbuffer), buffer, size);
+    if (result == 0)
+    {
+        /**
+         * MUST return unless **1** byte for support sync read data.
+         * It will return empty string when read no data
+         */
+        *(char *) buffer = '\0';
+        result = 1;
+    }
     rt_mutex_release(telnet->rx_ringbuffer_lock);
 
     return result;
