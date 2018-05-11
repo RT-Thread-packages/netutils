@@ -16,9 +16,9 @@
 
 |名称|分类|功能简介|使用文档|
 |:--|:--:|:--|:--|
-|[Ping](https://baike.baidu.com/item/ping/6235)|调试测试|利用“ping”命令可以检查网络是否连通，可以很好地帮助我们分析和判定网络故障|[点击查看](ping/README.md)|
-|[TFTP](https://baike.baidu.com/item/TFTP)|文件传输|TFTP是一个传输文件的简单协议，比 FTP 还要轻量级|[点击查看](tftp/README.md)|
+|[Ping](ping/README.md)|调试测试|利用“ping”命令可以检查网络是否连通，可以很好地帮助我们分析和判定网络故障|[点击查看](ping/README.md)|
+|[TFTP](tftp/README.md)|文件传输|TFTP是一个传输文件的简单协议，比 FTP 还要轻量级|[点击查看](tftp/README.md)|
 |[iperf](iperf/README.md)|性能测试|测试最大 TCP 和 UDP 带宽性能，可以报告带宽、延迟抖动和数据包丢失|[点击查看](iperf/README.md)|
-|[NetIO](http://www.nwlab.net/art/netio/netio.html)|性能测试|测试网络的吞吐量的工具|[点击查看](netio/README.md)|
-|[NTP](https://baike.baidu.com/item/NTP)|时间同步|网络时间协议|[点击查看](ntp/README.md)|
-|[Telnet](https://baike.baidu.com/item/Telnet)|远程访问|可以远程登录到 RT-Thread 的 Finsh/MSH Shell|[点击查看](telnet/README.md)|
+|[NetIO](netio/README.md)|性能测试|测试网络的吞吐量的工具|[点击查看](netio/README.md)|
+|[NTP](ntp/README.md)|时间同步|网络时间协议|[点击查看](ntp/README.md)|
+|[Telnet](telnet/README.md)|远程访问|可以远程登录到 RT-Thread 的 Finsh/MSH Shell|[点击查看](telnet/README.md)|
