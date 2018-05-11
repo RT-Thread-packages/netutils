@@ -4,6 +4,8 @@ cwd = GetCurrentDir()
 src = Glob('*.c')
 
 CPPPATH = [cwd]
+CPPPATH += [cwd + '/../../../../../components/dfs/filesystems/net/select']
+CPPPATH += [cwd + '/../../../../../components/dfs/filesystems/net']
 
 group = DefineGroup('NetUtils', src, depend = ['PKG_NETUTILS_NTP'], CPPPATH = CPPPATH)
 
