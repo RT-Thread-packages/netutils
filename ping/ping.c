@@ -42,9 +42,9 @@
 #endif
 
 /** ping receive timeout - in milliseconds */
-#define PING_RCV_TIMEO rt_tick_from_millisecond(2000)
+#define PING_RCV_TIMEO (2*RT_TICK_PER_SECOND)
 /** ping delay - in milliseconds */
-#define PING_DELAY     rt_tick_from_millisecond(1000)
+#define PING_DELAY     (1*RT_TICK_PER_SECOND)
 
 /** ping identifier - must fit on a u16_t */
 #ifndef PING_ID
