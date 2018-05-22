@@ -233,7 +233,7 @@ static void client_close(struct telnet_session* telnet)
 #endif /* RT_USING_POSIX */
 
     /* close connection */
-    close(telnet->client_fd);
+    closesocket(telnet->client_fd);
 
     /* restore shell option */
     finsh_set_echo(telnet->echo_mode);
