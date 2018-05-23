@@ -235,7 +235,7 @@ time_t ntp_get_local_time(const char *host_name)
     return cur_time;
 }
 
-#ifdef RT_USING_RTC
+
 /**
  * Sync current local time to RTC by NTP
  *
@@ -246,15 +246,25 @@ time_t ntp_get_local_time(const char *host_name)
  */
 time_t ntp_sync_to_rtc(const char *host_name)
 {
+#ifdef RT_USING_RTC
     struct tm *cur_tm;
+#endif
+
     time_t cur_time = ntp_get_local_time(host_name);
 
     if (cur_time)
     {
+
+#ifdef RT_USING_RTC    
         cur_tm = localtime(&cur_time);
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
+        
         cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
+#endif /* RT_USING_RTC */
+
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
+        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
     }
 
     return cur_time;
@@ -262,7 +272,6 @@ time_t ntp_sync_to_rtc(const char *host_name)
 
 void cmd_ntp_sync(int argc, char **argv)
 {
-    time_t cur_time = NULL;
     char *host_name = NULL;
 
     if (argc > 1)
@@ -270,17 +279,11 @@ void cmd_ntp_sync(int argc, char **argv)
         host_name = argv[1];
     }
 
-    cur_time = ntp_sync_to_rtc(host_name);
-
-    if (cur_time)
-    {
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
-        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
-    }
+    ntp_sync_to_rtc(host_name);
 }
 
 #ifdef RT_USING_FINSH
 #include <finsh.h>
+FINSH_FUNCTION_EXPORT_ALIAS(ntp_sync_to_rtc, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync(host_name));
 FINSH_FUNCTION_EXPORT_ALIAS(cmd_ntp_sync, __cmd_ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
-#endif /* RT_USING_RTC */
