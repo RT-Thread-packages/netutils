@@ -254,6 +254,7 @@ time_t ntp_sync_to_rtc(const char *host_name)
 
     if (cur_time)
     {
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
 
 #ifdef RT_USING_RTC    
         cur_tm = localtime(&cur_time);
@@ -261,10 +262,11 @@ time_t ntp_sync_to_rtc(const char *host_name)
         
         cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
+        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
+#else
+        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
 #endif /* RT_USING_RTC */
 
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
-        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
     }
 
     return cur_time;
