@@ -256,10 +256,10 @@ time_t ntp_sync_to_rtc(const char *host_name)
     {
         rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
 
-#ifdef RT_USING_RTC    
+#ifdef RT_USING_RTC
         cur_tm = localtime(&cur_time);
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
-        
+
         cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
         rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
