@@ -287,5 +287,5 @@ void cmd_ntp_sync(int argc, char **argv)
 #ifdef RT_USING_FINSH
 #include <finsh.h>
 FINSH_FUNCTION_EXPORT_ALIAS(ntp_sync_to_rtc, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync(host_name));
-FINSH_FUNCTION_EXPORT_ALIAS(cmd_ntp_sync, __cmd_ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
+MSH_CMD_EXPORT_ALIAS(cmd_ntp_sync, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
