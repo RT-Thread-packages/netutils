@@ -24,6 +24,7 @@
  */
 
 #include <lwip/opt.h>
+#include <lwip/init.h>
 #include <lwip/mem.h>
 #include <lwip/icmp.h>
 #include <lwip/netif.h>
@@ -138,8 +139,13 @@ static int ping_recv(int s, int *ttl)
 
 rt_err_t ping(char* target_name, rt_uint32_t times, rt_size_t size)
 {
-    int s, ttl, recv_len;
+#if LWIP_VERSION_MAJOR >= 2U
     struct timeval timeout = { PING_RCV_TIMEO / RT_TICK_PER_SECOND, PING_RCV_TIMEO % RT_TICK_PER_SECOND };
+#else
+    int timeout = PING_RCV_TIMEO * 1000UL / RT_TICK_PER_SECOND;
+#endif
+
+    int s, ttl, recv_len;
     ip_addr_t target_addr;
     rt_uint32_t send_times;
     rt_tick_t recv_start_tick;
@@ -177,7 +183,7 @@ rt_err_t ping(char* target_name, rt_uint32_t times, rt_size_t size)
         return -RT_ERROR;
     }
 
-    lwip_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval));
+    lwip_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     while (1)
     {
