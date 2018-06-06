@@ -180,7 +180,7 @@ time_t ntp_get_time(const char *host_name)
     FD_SET(sockfd, &readset);
 
     if (select(sockfd + 1, &readset, RT_NULL, RT_NULL, &timeout) <= 0) {
-        ntp_error("select the socket timeout(10s)");
+        ntp_error("select the socket timeout(%ds)", NTP_GET_TIMEOUT);
         goto __exit;
     }
 
