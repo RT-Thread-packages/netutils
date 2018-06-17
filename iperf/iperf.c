@@ -42,6 +42,8 @@ static void iperf_client(void* thread_param)
     rt_tick_t tick1, tick2;
     struct sockaddr_in addr;
 
+    char speed[32] = { 0 };
+
     send_buf = (uint8_t *) malloc (IPERF_BUFSZ);
     if (!send_buf) return ;
 
@@ -53,7 +55,7 @@ static void iperf_client(void* thread_param)
         sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (sock < 0) 
         {
-            printf("create socket failed!\n");
+            rt_kprintf("create socket failed!\n");
             rt_thread_delay(RT_TICK_PER_SECOND);
             continue;
         }
@@ -65,14 +67,14 @@ static void iperf_client(void* thread_param)
         ret = connect(sock, (const struct sockaddr*)&addr, sizeof(addr));
         if (ret == -1) 
         {
-            printf("Connect failed!\n");
+            rt_kprintf("Connect failed!\n");
             closesocket(sock);
 
             rt_thread_delay(RT_TICK_PER_SECOND);
             continue;
         }
 
-        printf("Connect to iperf server successful!\n");
+        rt_kprintf("Connect to iperf server successful!\n");
 
         {
             int flag = 1;
@@ -94,9 +96,10 @@ static void iperf_client(void* thread_param)
             {
                 float f;
 
-                f = sentlen*RT_TICK_PER_SECOND/125/(tick2-tick1);
-                f /= 1000;
-                printf("%2.2f Mbps!\n", f);
+                f = (float)(sentlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1));
+                f /= 1000.0f;
+                snprintf(speed, sizeof(speed), "%.4f Mbps!\n", f);
+                rt_kprintf("%s", speed);
                 tick1 = tick2;
                 sentlen = 0;
             }
@@ -113,7 +116,7 @@ static void iperf_client(void* thread_param)
         closesocket(sock);
 
         rt_thread_delay(RT_TICK_PER_SECOND*2);
-        printf("disconnected!\n");
+        rt_kprintf("disconnected!\n");
     }
 }
 
@@ -124,18 +127,19 @@ void iperf_server(void* thread_param)
     rt_tick_t tick1, tick2;
     int sock = -1, connected, bytes_received, recvlen;
     struct sockaddr_in server_addr, client_addr;
+    char speed[32] = { 0 };
 
     recv_data = (uint8_t *)malloc(IPERF_BUFSZ);
     if (recv_data == RT_NULL)
     {
-        printf("No memory\n");
+        rt_kprintf("No memory\n");
         goto __exit;
     }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
-        printf("Socket error\n");
+        rt_kprintf("Socket error\n");
         goto __exit;
     }
 
@@ -146,13 +150,13 @@ void iperf_server(void* thread_param)
 
     if (bind(sock, (struct sockaddr *)&server_addr, sizeof(struct sockaddr)) == -1)
     {
-        printf("Unable to bind\n");
+        rt_kprintf("Unable to bind\n");
         goto __exit;
     }
 
     if (listen(sock, 5) == -1)
     {
-        printf("Listen error\n");
+        rt_kprintf("Listen error\n");
         goto __exit;
     }
 
@@ -162,7 +166,7 @@ void iperf_server(void* thread_param)
 
         connected = accept(sock, (struct sockaddr *)&client_addr, &sin_size);
 
-        printf("new client connected from (%s, %d)\n",
+        rt_kprintf("new client connected from (%s, %d)\n",
                   inet_ntoa(client_addr.sin_addr),ntohs(client_addr.sin_port));
 
         {
@@ -189,9 +193,10 @@ void iperf_server(void* thread_param)
             {
                 float f;
 
-                f = recvlen*RT_TICK_PER_SECOND/125/(tick2-tick1);
-                f /= 1000;
-                printf("%2.2f Mbps!\n", f);
+                f = (float) (recvlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1));
+                f /= 1000.0f;
+                snprintf(speed, sizeof(speed), "%.4f Mbps!\n", f);
+                rt_kprintf("%s", speed);
                 tick1 = tick2;
                 recvlen = 0;
             }
@@ -208,21 +213,21 @@ __exit:
 
 void iperf_usage(void)
 {
-    printf("Usage: iperf [-s|-c host] [options]\n");
-    printf("       iperf [-h|--stop]\n");
-    printf("\n");
-    printf("Client/Server:\n");
-    printf("  -p #         server port to listen on/connect to\n");
-    printf("\n");
-    printf("Server specific:\n");
-    printf("  -s           run in server mode\n");
-    printf("\n");
-    printf("Client specific:\n");
-    printf("  -c <host>    run in client mode, connecting to <host>\n");
-    printf("\n");
-    printf("Miscellaneous:\n");
-    printf("  -h           print this message and quit\n");
-    printf("  --stop       stop iperf program\n");
+    rt_kprintf("Usage: iperf [-s|-c host] [options]\n");
+    rt_kprintf("       iperf [-h|--stop]\n");
+    rt_kprintf("\n");
+    rt_kprintf("Client/Server:\n");
+    rt_kprintf("  -p #         server port to listen on/connect to\n");
+    rt_kprintf("\n");
+    rt_kprintf("Server specific:\n");
+    rt_kprintf("  -s           run in server mode\n");
+    rt_kprintf("\n");
+    rt_kprintf("Client specific:\n");
+    rt_kprintf("  -c <host>    run in client mode, connecting to <host>\n");
+    rt_kprintf("\n");
+    rt_kprintf("Miscellaneous:\n");
+    rt_kprintf("  -h           print this message and quit\n");
+    rt_kprintf("  --stop       stop iperf program\n");
 
     return ;
 }
@@ -305,8 +310,8 @@ int iperf(int argc, char** argv)
     }
     else
     {
-        printf("Please stop iperf firstly, by:\n");
-        printf("iperf --stop\n");
+        rt_kprintf("Please stop iperf firstly, by:\n");
+        rt_kprintf("iperf --stop\n");
     }
 
     return 0;

@@ -76,7 +76,7 @@ msh />iperf -s -p 5001
 
 #### 2.2.4 启动 iperf 客户端
 
-需要在 RT-Thread 上使用 Finsh/MSH 命令来启动 iperf 服务器，大致效果如下： 
+需要在 RT-Thread 上使用 Finsh/MSH 命令来启动 iperf 客户端，大致效果如下： 
 
 ```
 msh />iperf -c 192.168.12.45 -p 5001
