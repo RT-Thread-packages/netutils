@@ -61,3 +61,36 @@ msh /web_root>
 ```
 
 ![tftpd_get](../images/tftpd_get.png)
+
+## 3、常见问题
+
+### 3.1 Put 文件到单片机时，程序会进入 hardfault ：
+
+hardfault 时日志类似如下：
+
+```
+msh />psr: 0x61000000
+ pc: 0x08009030
+ lr: 0x08009031
+r12: 0x00000000
+r03: 0x20000208
+r02: 0x20000208
+r01: 0x2000fa44
+r00: 0x00000000
+hard fault on thread: tcpip
+thread pri  status      sp     stack size max used left tick  error
+------ ---  ------- ---------- ----------  ------  ---------- ---
+tshell  20  suspend 0x00000140 0x00001000    07%   0x00000006 000
+tcpip   10  close   0xfffffd0f 0x0000004b    100%   0x2000f9bf 000
+etx     12  ready   0x00000098 0x00000400    14%   0x00000010 000
+erx     12  ready   0x000000e0 0x00000400    53%   0x00000010 000
+tidle   31  ready   0x00000048 0x00000100    34%   0x0000001c 000
+```
+
+可以看出 tcpip 线程的 max used 指标为 100%，说明其堆栈已经溢出。还有种可能，此时的 tcpip 线程那行信息出现了乱码，同样也是其线程堆栈溢出所致。
+
+在 lwIP 的 tcpip 默认配置位于：
+
+`RT-Thread Components` → `Network stack` → `light weight TCP/IP stack` → ` (1024) the stack size of lwIP thread`
+
+该选项默认为 `1024` ，建议调整至 `2048` 即可
