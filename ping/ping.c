@@ -104,7 +104,11 @@ static err_t ping_send(int s, ip_addr_t *addr, int size)
 
     to.sin_len = sizeof(to);
     to.sin_family = AF_INET;
+#if LWIP_IPV4 && LWIP_IPV6
+    to.sin_addr.s_addr = addr->u_addr.ip4.addr;
+#elif LWIP_IPV4
     to.sin_addr.s_addr = addr->addr;
+#endif
 
     err = lwip_sendto(s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof(to));
     rt_free(iecho);
