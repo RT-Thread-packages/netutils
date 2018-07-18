@@ -25,11 +25,11 @@
 #include <rtthread.h>
 #include <rtdevice.h>
 
-#ifdef RT_USING_DFS_NET
+#if defined(RT_USING_DFS_NET) || defined(SAL_USING_POSIX)
 #include <sys/socket.h>
 #else
 #include <lwip/sockets.h>
-#endif /* RT_USING_DFS_NET */
+#endif /* SAL_USING_POSIX */
 
 #if defined(RT_USING_POSIX)
 #include <dfs_posix.h>
