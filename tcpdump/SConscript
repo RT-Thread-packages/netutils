@@ -1,16 +1,10 @@
 from building import *
-import rtconfig
 
-cwd  = GetCurrentDir()
+cwd = GetCurrentDir()
+src = Glob('*.c')
 
-src         = []
-CPPPATH     = []
-LIBS        = []
-LIBPATH     = []
+CPPPATH = [cwd]
 
-#src
-src += Glob('*.c')
-
-group = DefineGroup('tcpdump', src, depend = ['PKG_NETUTILS_TCPDUMP'], CPPPATH = CPPPATH, LIBS = LIBS, LIBPATH = LIBPATH)
+group = DefineGroup('NetUtils', src, depend = ['PKG_NETUTILS_TCPDUMP'], CPPPATH = CPPPATH)
 
 Return('group')
