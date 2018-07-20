@@ -3,8 +3,9 @@
 *
 */
 
-#include <rtdef.h>
 #include <rtthread.h>
+
+#ifdef PKG_NETUTILS_IPERF
 #include <rtdevice.h>
 
 #include <stdint.h>
@@ -325,3 +326,4 @@ __usage:
 #include <finsh.h>
 MSH_CMD_EXPORT(iperf, - the network bandwidth measurement tool);
 #endif
+#endif /* PKG_NETUTILS_IPERF */

@@ -30,6 +30,10 @@
  * This file is part of the lwIP TCP/IP stack.
  *
  */
+
+#include <rtthread.h>
+
+#ifdef PKG_NETUTILS_NETIO
 #include "lwip/opt.h"
 
 #if LWIP_TCP
@@ -446,3 +450,4 @@ FINSH_FUNCTION_EXPORT(netio_init, netio server);
 MSH_CMD_EXPORT(netio_init, netio server);
 #endif /* FINSH_USING_MSH */
 #endif /* RT_USING_FINSH */
+#endif /* PKG_NETUTILS_NETIO */

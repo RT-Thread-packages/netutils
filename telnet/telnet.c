@@ -25,6 +25,7 @@
 #include <rtthread.h>
 #include <rtdevice.h>
 
+#ifdef PKG_NETUTILS_TELNET
 #if defined(RT_USING_DFS_NET) || defined(SAL_USING_POSIX)
 #include <sys/socket.h>
 #else
@@ -488,3 +489,4 @@ FINSH_FUNCTION_EXPORT(telnet_server, startup telnet server);
 MSH_CMD_EXPORT(telnet_server, startup telnet server)
 #endif /* FINSH_USING_MSH */
 #endif /* RT_USING_FINSH */
+#endif /* PKG_NETUTILS_TELNET */

@@ -18,6 +18,9 @@
  *
  */
 
+#include <rtthread.h>
+
+#ifdef PKG_NETUTILS_NTP
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +30,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <rtthread.h>
 
 #ifdef NETUTILS_NTP_TIMEZONE
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
@@ -302,3 +304,4 @@ static void cmd_ntp_sync(int argc, char **argv)
 FINSH_FUNCTION_EXPORT(ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync(host_name));
 MSH_CMD_EXPORT_ALIAS(cmd_ntp_sync, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
+#endif /* PKG_NETUTILS_NTP */

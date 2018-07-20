@@ -23,6 +23,9 @@
  * 2018-01-25     armink       Add ping domain name
  */
 
+#include <rtthread.h>
+
+#ifdef PKG_NETUTILS_PING
 #include <lwip/opt.h>
 #include <lwip/init.h>
 #include <lwip/mem.h>
@@ -245,3 +248,4 @@ int cmd_ping(int argc, char **argv)
 }
 FINSH_FUNCTION_EXPORT_ALIAS(cmd_ping, __cmd_ping, ping network host);
 #endif
+#endif /* PKG_NETUTILS_PING */

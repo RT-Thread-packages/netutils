@@ -24,8 +24,9 @@
  */
 
 #include <rtthread.h>
+
+#ifdef PKG_NETUTILS_TCPDUMP
 #include <dfs_posix.h>
-#include <rtdef.h>
 #include "netif/ethernetif.h"
 #include "optparse.h"
 
@@ -733,3 +734,4 @@ static int tcpdump_test(int argc, char *argv[])
     #include <finsh.h>
     MSH_CMD_EXPORT_ALIAS(tcpdump_test, tcpdump, test optparse_short cmd.);
 #endif
+#endif /* PKG_NETUTILS_TCPDUMP */
