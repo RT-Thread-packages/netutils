@@ -124,7 +124,7 @@ static void iperf_client(void* thread_param)
 void iperf_server(void* thread_param)
 {
     uint8_t *recv_data;
-    rt_uint32_t sin_size;
+    socklen_t sin_size;
     rt_tick_t tick1, tick2;
     int sock = -1, connected, bytes_received, recvlen;
     struct sockaddr_in server_addr, client_addr;
