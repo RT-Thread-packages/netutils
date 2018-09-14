@@ -324,6 +324,6 @@ __usage:
 
 #ifdef RT_USING_FINSH
 #include <finsh.h>
-MSH_CMD_EXPORT(iperf, - the network bandwidth measurement tool);
+MSH_CMD_EXPORT(iperf, the network bandwidth measurement tool);
 #endif
 #endif /* PKG_NETUTILS_IPERF */
