@@ -139,6 +139,15 @@ time_t ntp_get_time(const char *host_name)
         return 0;
     }
 
+    timeout.tv_sec = NTP_GET_TIMEOUT;
+    timeout.tv_usec = 0;
+
+    /* set receive and send timeout option */
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (void *) &timeout,
+               sizeof(timeout));
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (void *) &timeout,
+               sizeof(timeout));
+
     server = gethostbyname(host_name); // Convert URL to IP.
 
     if (server == NULL) {
@@ -173,17 +182,6 @@ time_t ntp_get_time(const char *host_name)
 
     if (n < 0) {
         ntp_error("writing to socket");
-        goto __exit;
-    }
-
-    timeout.tv_sec = NTP_GET_TIMEOUT;
-    timeout.tv_usec = 0;
-
-    FD_ZERO(&readset);
-    FD_SET(sockfd, &readset);
-
-    if (select(sockfd + 1, &readset, RT_NULL, RT_NULL, &timeout) <= 0) {
-        ntp_error("select the socket timeout(5s)");
         goto __exit;
     }
 
