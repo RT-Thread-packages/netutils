@@ -54,6 +54,8 @@
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
 
+#define ntp_error(...)                 rt_kprintf("\033[31;22m[E/NTP]: ERROR ");rt_kprintf(__VA_ARGS__);rt_kprintf("\033[0m\n")
+
 // Structure that defines the 48 byte NTP packet protocol.
 typedef struct {
 
@@ -86,11 +88,6 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static void ntp_error(char* msg)
-{
-    rt_kprintf("\033[31;22m[E/NTP]: ERROR %s\033[0m\n", msg); // Print the error message to stderr.
-}
-
 /**
  * Get the UTC time from NTP server
  *
@@ -108,8 +105,6 @@ time_t ntp_get_time(const char *host_name)
     int portno = 123; // NTP UDP port number.
 
     time_t new_time = 0;
-
-    fd_set readset;
     struct timeval timeout;
 
     // Using default host name when host_name is NULL
@@ -190,7 +185,7 @@ time_t ntp_get_time(const char *host_name)
     n = recv(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
 
     if (n < 0) {
-        ntp_error("reading from socket");
+        ntp_error("reading from socket, error code %d.", n);
         goto __exit;
     }
 
