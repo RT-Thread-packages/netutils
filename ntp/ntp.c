@@ -27,7 +27,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/select.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
@@ -185,7 +184,11 @@ time_t ntp_get_time(const char *host_name)
     n = recv(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
 
     if (n < 0) {
-        ntp_error("reading from socket, error code %d.", n);
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            ntp_error("receive the socket timeout(%ds)", NTP_GET_TIMEOUT);
+        } else {
+            ntp_error("reading from socket, error code %d.", n);
+        }
         goto __exit;
     }
 
