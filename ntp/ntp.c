@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <rtdevice.h>
 
 #ifdef NETUTILS_NTP_TIMEZONE
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
