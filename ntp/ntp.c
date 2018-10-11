@@ -27,8 +27,10 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <rtdevice.h>
 
 #ifdef NETUTILS_NTP_TIMEZONE
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
@@ -52,8 +54,6 @@
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
-
-#define ntp_error(...)                 rt_kprintf("\033[31;22m[E/NTP]: ERROR ");rt_kprintf(__VA_ARGS__);rt_kprintf("\033[0m\n")
 
 // Structure that defines the 48 byte NTP packet protocol.
 typedef struct {
@@ -87,6 +87,11 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+static void ntp_error(char* msg)
+{
+    rt_kprintf("\033[31;22m[E/NTP]: ERROR %s\033[0m\n", msg); // Print the error message to stderr.
+}
+
 /**
  * Get the UTC time from NTP server
  *
@@ -104,6 +109,8 @@ time_t ntp_get_time(const char *host_name)
     int portno = 123; // NTP UDP port number.
 
     time_t new_time = 0;
+
+    fd_set readset;
     struct timeval timeout;
 
     // Using default host name when host_name is NULL
@@ -132,15 +139,6 @@ time_t ntp_get_time(const char *host_name)
         ntp_error("opening socket");
         return 0;
     }
-
-    timeout.tv_sec = NTP_GET_TIMEOUT;
-    timeout.tv_usec = 0;
-
-    /* set receive and send timeout option */
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (void *) &timeout,
-               sizeof(timeout));
-    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (void *) &timeout,
-               sizeof(timeout));
 
     server = gethostbyname(host_name); // Convert URL to IP.
 
@@ -179,16 +177,23 @@ time_t ntp_get_time(const char *host_name)
         goto __exit;
     }
 
+    timeout.tv_sec = NTP_GET_TIMEOUT;
+    timeout.tv_usec = 0;
+
+    FD_ZERO(&readset);
+    FD_SET(sockfd, &readset);
+
+    if (select(sockfd + 1, &readset, RT_NULL, RT_NULL, &timeout) <= 0) {
+        ntp_error("select the socket timeout(5s)");
+        goto __exit;
+    }
+
     // Wait and receive the packet back from the server. If n == -1, it failed.
 
     n = recv(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
 
     if (n < 0) {
-        if (errno == EWOULDBLOCK || errno == EAGAIN) {
-            ntp_error("receive the socket timeout(%ds)", NTP_GET_TIMEOUT);
-        } else {
-            ntp_error("reading from socket, error code %d.", n);
-        }
+        ntp_error("reading from socket");
         goto __exit;
     }
 
