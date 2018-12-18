@@ -196,13 +196,16 @@ rt_err_t ping(char* target_name, rt_uint32_t times, rt_size_t size)
 
     while (1)
     {
+        int elapsed_time;
+
         if (ping_send(s, &target_addr, size) == ERR_OK)
         {
             recv_start_tick = rt_tick_get();
             if ((recv_len = ping_recv(s, &ttl)) >= 0)
             {
-                rt_kprintf("%d bytes from %s icmp_seq=%d ttl=%d time=%d ticks\n", recv_len, inet_ntoa(ina), send_times,
-                        ttl, rt_tick_get() - recv_start_tick);
+                elapsed_time = (rt_tick_get() - recv_start_tick) * 1000UL / RT_TICK_PER_SECOND;
+                rt_kprintf("%d bytes from %s icmp_seq=%d ttl=%d time=%d ms\n", recv_len, inet_ntoa(ina), send_times,
+                        ttl, elapsed_time);
             }
             else
             {
