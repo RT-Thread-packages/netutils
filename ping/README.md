@@ -1,21 +1,21 @@
 # Ping
 
-## 1¡¢½éÉÜ
+## 1ã€ä»‹ç»
 
-[ping](https://baike.baidu.com/item/ping/6235) ÊÇÒ»ÖÖÍøÂç¹¤¾ß£¬ÓÃÀ´²âÊÔÊý¾Ý°üÄÜ·ñÍ¨¹ý IP Ð­Òéµ½´ïÌØ¶¨Ö÷»ú¡£¹ÀËãÓëÖ÷»ú¼äµÄ¶ªÊ§Êý¾Ý°üÂÊ£¨¶ª°üÂÊ£©ºÍÊý¾Ý°üÍù·µÊ±¼ä£¨ÍøÂçÊ±ÑÓ£¬Round-trip delay time£©¡£
+[ping](https://baike.baidu.com/item/ping/6235) æ˜¯ä¸€ç§ç½‘ç»œå·¥å…·ï¼Œç”¨æ¥æµ‹è¯•æ•°æ®åŒ…èƒ½å¦é€šè¿‡ IP åè®®åˆ°è¾¾ç‰¹å®šä¸»æœºã€‚ä¼°ç®—ä¸Žä¸»æœºé—´çš„ä¸¢å¤±æ•°æ®åŒ…çŽ‡ï¼ˆä¸¢åŒ…çŽ‡ï¼‰å’Œæ•°æ®åŒ…å¾€è¿”æ—¶é—´ï¼ˆç½‘ç»œæ—¶å»¶ï¼ŒRound-trip delay timeï¼‰ã€‚
 
-## 2¡¢Ê¹ÓÃ
+## 2ã€ä½¿ç”¨
 
-ping Ö§³Ö·ÃÎÊ `IP µØÖ·` »ò `ÓòÃû` £¬Ê¹ÓÃ Finsh/MSH ÃüÁî½øÐÐ²âÊÔ£¬´óÖÂÊ¹ÓÃÐ§¹ûÈçÏÂ£º
+ping æ”¯æŒè®¿é—® `IP åœ°å€` æˆ– `åŸŸå` ï¼Œä½¿ç”¨ Finsh/MSH å‘½ä»¤è¿›è¡Œæµ‹è¯•ï¼Œå¤§è‡´ä½¿ç”¨æ•ˆæžœå¦‚ä¸‹ï¼š
 
-### 2.1 Ping ÓòÃû
+### 2.1 Ping åŸŸå
 
 ```
 msh />ping rt-thread.org
-60 bytes from 116.62.244.242 icmp_seq=0 ttl=49 time=11 ticks
-60 bytes from 116.62.244.242 icmp_seq=1 ttl=49 time=10 ticks
-60 bytes from 116.62.244.242 icmp_seq=2 ttl=49 time=12 ticks
-60 bytes from 116.62.244.242 icmp_seq=3 ttl=49 time=10 ticks
+60 bytes from 116.62.244.242 icmp_seq=0 ttl=49 time=11 ms
+60 bytes from 116.62.244.242 icmp_seq=1 ttl=49 time=10 ms
+60 bytes from 116.62.244.242 icmp_seq=2 ttl=49 time=12 ms
+60 bytes from 116.62.244.242 icmp_seq=3 ttl=49 time=10 ms
 msh />
 ```
 
@@ -23,10 +23,10 @@ msh />
 
 ```
 msh />ping 192.168.10.12
-60 bytes from 192.168.10.12 icmp_seq=0 ttl=64 time=5 ticks
-60 bytes from 192.168.10.12 icmp_seq=1 ttl=64 time=1 ticks
-60 bytes from 192.168.10.12 icmp_seq=2 ttl=64 time=2 ticks
-60 bytes from 192.168.10.12 icmp_seq=3 ttl=64 time=3 ticks
+60 bytes from 192.168.10.12 icmp_seq=0 ttl=64 time=5 ms
+60 bytes from 192.168.10.12 icmp_seq=1 ttl=64 time=1 ms
+60 bytes from 192.168.10.12 icmp_seq=2 ttl=64 time=2 ms
+60 bytes from 192.168.10.12 icmp_seq=3 ttl=64 time=3 ms
 msh />
 
 ```
