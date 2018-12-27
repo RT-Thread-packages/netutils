@@ -39,7 +39,7 @@ static void iperf_client(void* thread_param)
     int ret;
 
     uint8_t *send_buf;
-    int sentlen;
+    rt_uint64_t sentlen;
     rt_tick_t tick1, tick2;
     struct sockaddr_in addr;
 
@@ -126,7 +126,8 @@ void iperf_server(void* thread_param)
     uint8_t *recv_data;
     socklen_t sin_size;
     rt_tick_t tick1, tick2;
-    int sock = -1, connected, bytes_received, recvlen;
+    int sock = -1, connected, bytes_received;
+    rt_uint64_t recvlen;
     struct sockaddr_in server_addr, client_addr;
     char speed[32] = { 0 };
 
