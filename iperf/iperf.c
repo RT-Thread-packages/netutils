@@ -13,7 +13,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <sys/time.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include "netdb.h"
 
 #define IPERF_PORT          5001
@@ -23,16 +25,16 @@
 #define IPERF_MODE_SERVER   1
 #define IPERF_MODE_CLIENT   2
 
-typedef struct 
+typedef struct
 {
     int mode;
 
     char *host;
     int port;
-}IPERF_PARAM;
+} IPERF_PARAM;
 static IPERF_PARAM param = {IPERF_MODE_STOP, NULL, IPERF_PORT};
 
-static void iperf_client(void* thread_param)
+static void iperf_client(void *thread_param)
 {
     int i;
     int sock;
@@ -45,16 +47,16 @@ static void iperf_client(void* thread_param)
 
     char speed[32] = { 0 };
 
-    send_buf = (uint8_t *) malloc (IPERF_BUFSZ);
+    send_buf = (uint8_t *) malloc(IPERF_BUFSZ);
     if (!send_buf) return ;
 
     for (i = 0; i < IPERF_BUFSZ; i ++)
         send_buf[i] = i & 0xff;
 
-    while (param.mode != IPERF_MODE_STOP) 
+    while (param.mode != IPERF_MODE_STOP)
     {
         sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (sock < 0) 
+        if (sock < 0)
         {
             rt_kprintf("create socket failed!\n");
             rt_thread_delay(RT_TICK_PER_SECOND);
@@ -63,10 +65,10 @@ static void iperf_client(void* thread_param)
 
         addr.sin_family = PF_INET;
         addr.sin_port = htons(param.port);
-        addr.sin_addr.s_addr = inet_addr((char*)param.host);
+        addr.sin_addr.s_addr = inet_addr((char *)param.host);
 
-        ret = connect(sock, (const struct sockaddr*)&addr, sizeof(addr));
-        if (ret == -1) 
+        ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
+        if (ret == -1)
         {
             rt_kprintf("Connect failed!\n");
             closesocket(sock);
@@ -81,16 +83,16 @@ static void iperf_client(void* thread_param)
             int flag = 1;
 
             setsockopt(sock,
-                IPPROTO_TCP,     /* set option at TCP level */
-                TCP_NODELAY,     /* name of option */
-                (void *) &flag,  /* the cast is historical cruft */
-                sizeof(int));    /* length of option value */
+                       IPPROTO_TCP,     /* set option at TCP level */
+                       TCP_NODELAY,     /* name of option */
+                       (void *) &flag,  /* the cast is historical cruft */
+                       sizeof(int));    /* length of option value */
         }
 
         sentlen = 0;
 
         tick1 = rt_tick_get();
-        while(param.mode != IPERF_MODE_STOP) 
+        while (param.mode != IPERF_MODE_STOP)
         {
             tick2 = rt_tick_get();
             if (tick2 - tick1 >= RT_TICK_PER_SECOND * 5)
@@ -106,7 +108,7 @@ static void iperf_client(void* thread_param)
             }
 
             ret = send(sock, send_buf, IPERF_BUFSZ, 0);
-            if (ret > 0) 
+            if (ret > 0)
             {
                 sentlen += ret;
             }
@@ -116,12 +118,12 @@ static void iperf_client(void* thread_param)
 
         closesocket(sock);
 
-        rt_thread_delay(RT_TICK_PER_SECOND*2);
+        rt_thread_delay(RT_TICK_PER_SECOND * 2);
         rt_kprintf("disconnected!\n");
     }
 }
 
-void iperf_server(void* thread_param)
+void iperf_server(void *thread_param)
 {
     uint8_t *recv_data;
     socklen_t sin_size;
@@ -130,6 +132,8 @@ void iperf_server(void* thread_param)
     rt_uint64_t recvlen;
     struct sockaddr_in server_addr, client_addr;
     char speed[32] = { 0 };
+    fd_set readset;
+    struct timeval timeout;
 
     recv_data = (uint8_t *)malloc(IPERF_BUFSZ);
     if (recv_data == RT_NULL)
@@ -162,23 +166,32 @@ void iperf_server(void* thread_param)
         goto __exit;
     }
 
-    while(param.mode != IPERF_MODE_STOP)
+    timeout.tv_sec = 3;
+    timeout.tv_usec = 0;
+
+    while (param.mode != IPERF_MODE_STOP)
     {
+        FD_ZERO(&readset);
+        FD_SET(sock, &readset);
+
+        if (select(sock + 1, &readset, RT_NULL, RT_NULL, &timeout) == 0)
+            continue;
+
         sin_size = sizeof(struct sockaddr_in);
 
         connected = accept(sock, (struct sockaddr *)&client_addr, &sin_size);
 
         rt_kprintf("new client connected from (%s, %d)\n",
-                  inet_ntoa(client_addr.sin_addr),ntohs(client_addr.sin_port));
+                   inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
         {
             int flag = 1;
 
             setsockopt(connected,
-                IPPROTO_TCP,     /* set option at TCP level */
-                TCP_NODELAY,     /* name of option */
-                (void *) &flag,  /* the cast is historical cruft */
-                sizeof(int));    /* length of option value */
+                       IPPROTO_TCP,     /* set option at TCP level */
+                       TCP_NODELAY,     /* name of option */
+                       (void *) &flag,  /* the cast is historical cruft */
+                       sizeof(int));    /* length of option value */
         }
 
         recvlen = 0;
@@ -195,7 +208,7 @@ void iperf_server(void* thread_param)
             {
                 float f;
 
-                f = (float) (recvlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1));
+                f = (float)(recvlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1));
                 f /= 1000.0f;
                 snprintf(speed, sizeof(speed), "%.4f Mbps!\n", f);
                 rt_kprintf("%s", speed);
@@ -234,23 +247,23 @@ void iperf_usage(void)
     return ;
 }
 
-int iperf(int argc, char** argv)
+int iperf(int argc, char **argv)
 {
     int mode = 0; /* server mode */
     char *host = NULL;
     int port = IPERF_PORT;
 
     if (argc == 1) goto __usage;
-    else 
+    else
     {
-        if (strcmp(argv[1], "-h") ==0) goto __usage;
-        else if (strcmp(argv[1], "--stop") ==0)
+        if (strcmp(argv[1], "-h") == 0) goto __usage;
+        else if (strcmp(argv[1], "--stop") == 0)
         {
             /* stop iperf */
             param.mode = IPERF_MODE_STOP;
             return 0;
         }
-        else if (strcmp(argv[1], "-s") ==0)
+        else if (strcmp(argv[1], "-s") == 0)
         {
             mode = IPERF_MODE_SERVER; /* server mode */
 
@@ -264,7 +277,7 @@ int iperf(int argc, char** argv)
                 else goto __usage;
             }
         }
-        else if (strcmp(argv[1], "-c") ==0)
+        else if (strcmp(argv[1], "-c") == 0)
         {
             mode = IPERF_MODE_CLIENT; /* client mode */
             if (argc < 3) goto __usage;
@@ -280,7 +293,7 @@ int iperf(int argc, char** argv)
                 else goto __usage;
             }
         }
-        else if (strcmp(argv[1], "-h") ==0)
+        else if (strcmp(argv[1], "-h") == 0)
         {
             goto __usage;
         }
@@ -302,11 +315,11 @@ int iperf(int argc, char** argv)
         if (host) param.host = rt_strdup(host);
 
         if (mode == IPERF_MODE_CLIENT)
-            tid = rt_thread_create("iperfc", iperf_client, RT_NULL, 
-                2048, 20, 20);
+            tid = rt_thread_create("iperfc", iperf_client, RT_NULL,
+                                   2048, 20, 20);
         else if (mode == IPERF_MODE_SERVER)
-            tid = rt_thread_create("iperfd", iperf_server, RT_NULL, 
-                2048, 20, 20);
+            tid = rt_thread_create("iperfd", iperf_server, RT_NULL,
+                                   2048, 20, 20);
 
         if (tid) rt_thread_startup(tid);
     }
@@ -324,7 +337,7 @@ __usage:
 }
 
 #ifdef RT_USING_FINSH
-#include <finsh.h>
-MSH_CMD_EXPORT(iperf, the network bandwidth measurement tool);
+    #include <finsh.h>
+    MSH_CMD_EXPORT(iperf, the network bandwidth measurement tool);
 #endif
 #endif /* PKG_NETUTILS_IPERF */
