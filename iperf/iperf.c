@@ -8,6 +8,7 @@
 #ifdef PKG_NETUTILS_IPERF
 #include <rtdevice.h>
 
+#include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <fcntl.h>
