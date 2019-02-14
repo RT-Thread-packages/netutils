@@ -228,10 +228,11 @@ static void client_close(struct telnet_session* telnet)
 #if defined(RT_USING_POSIX)
     ioctl(libc_stdio_get_console(), F_SETFL, (void *) dev_old_flag);
     libc_stdio_set_console(RT_CONSOLE_DEVICE_NAME, O_RDWR);
-    rt_sem_release(telnet->read_notice);
 #else
     finsh_set_device(RT_CONSOLE_DEVICE_NAME);
 #endif /* RT_USING_POSIX */
+
+    rt_sem_release(telnet->read_notice);
 
     /* close connection */
     closesocket(telnet->client_fd);
