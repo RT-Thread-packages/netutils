@@ -312,6 +312,16 @@ static rt_err_t telnet_control(rt_device_t dev, int cmd, void *args)
     return RT_EOK;
 }
 
+#ifdef RT_USING_DEVICE_OPS
+    static struct rt_device_ops _ops = {
+        telnet_init,
+        telnet_open,
+        telnet_close,
+        telnet_read,
+        telnet_write,
+        telnet_control
+    };
+#endif
 /* telnet server thread entry */
 static void telnet_thread(void* parameter)
 {
@@ -346,12 +356,16 @@ static void telnet_thread(void* parameter)
 
     /* register telnet device */
     telnet->device.type     = RT_Device_Class_Char;
+#ifdef RT_USING_DEVICE_OPS
+    telnet->device.ops = &_ops;
+#else    
     telnet->device.init     = telnet_init;
     telnet->device.open     = telnet_open;
     telnet->device.close    = telnet_close;
     telnet->device.read     = telnet_read;
     telnet->device.write    = telnet_write;
     telnet->device.control  = telnet_control;
+#endif
 
     /* no private */
     telnet->device.user_data = RT_NULL;
