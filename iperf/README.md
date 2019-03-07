@@ -33,8 +33,16 @@ dns server #1: 223.5.5.5
 
 需要在 RT-Thread 上使用 Finsh/MSH 命令来启动 iperf 服务器，大致效果如下： 
 
+tcp 模式
+
 ```
 msh />iperf -s -p 5001
+```
+
+udp 模式
+
+```
+msh />iperf -u -s -p 5001
 ```
 
 - -s 表示作为服务器启动
@@ -54,7 +62,13 @@ msh />iperf -s -p 5001
 - 点击 `run Lperf!` 开始测试 
 - 等待测试结束。测试时，测试数据会在 shell 界面和 JPerf 软件上显示。
 
+tcp 模式软件设置
+
 ![iperfs](../images/iperfs.png)
+
+udp 模式软件设置
+
+![iperfs-udp](../images/iperfs-udp.png)
 
 ### 2.2 iperf 客户端模式
 
@@ -78,15 +92,26 @@ msh />iperf -s -p 5001
 
 需要在 RT-Thread 上使用 Finsh/MSH 命令来启动 iperf 客户端，大致效果如下： 
 
+tcp 模式
+
 ```
 msh />iperf -c 192.168.12.45 -p 5001
+```
+
+udp 模式
+
+```
+msh />iperf -u -c 192.168.12.45 -p 5001
 ```
 
 - -c 表示作为客户端启动，后面需要加运行服务器端的pc的 IP 地址
 - -p 表示连接 5001 端口
 - 等待测试结束。测试时，测试数据会在 shell 界面和 JPerf 软件上显示。
 
+tcp 模式软件设置
+
 ![iperfc](../images/iperfc.png)
 
- 
+udp 模式软件设置
 
+![iperfc-udp](../images/iperfc-udp.png)

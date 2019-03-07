@@ -35,12 +35,136 @@ typedef struct
 } IPERF_PARAM;
 static IPERF_PARAM param = {IPERF_MODE_STOP, NULL, IPERF_PORT};
 
+static void iperf_udp_client(void *thread_param)
+{
+    int sock;
+    rt_uint32_t *buffer;
+    struct sockaddr_in server;
+    rt_uint32_t packet_count = 0;
+    rt_uint32_t tick;
+    int send_size;
+
+    send_size = IPERF_BUFSZ > 1470 ? 1470 : IPERF_BUFSZ;
+    buffer = malloc(IPERF_BUFSZ);
+    if (buffer == NULL)
+    {
+        return;
+    }
+    memset(buffer, 0x00, IPERF_BUFSZ);
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
+    if(sock < 0)
+    {
+        rt_kprintf("can't create socket!! exit\n");
+        return;
+    }
+    server.sin_family = PF_INET;
+    server.sin_port = htons(param.port);
+    server.sin_addr.s_addr = inet_addr(param.host);
+    rt_kprintf("iperf udp mode run...\n");
+    while (param.mode != IPERF_MODE_STOP)
+    {
+        packet_count++;
+        tick = rt_tick_get();
+        buffer[0] = htonl(packet_count);
+        buffer[1] = htonl(tick / RT_TICK_PER_SECOND);
+        buffer[2] = htonl((tick % RT_TICK_PER_SECOND) * 1000);
+        sendto(sock, buffer, send_size, 0, (struct sockaddr *)&server, sizeof(struct sockaddr_in));
+    }
+    closesocket(sock);
+    free(buffer);
+}
+
+static void iperf_udp_server(void *thread_param)
+{
+    int sock;
+    rt_uint32_t *buffer;
+    struct sockaddr_in server;
+    struct sockaddr_in sender;
+    int sender_len, r_size;
+    rt_uint64_t sentlen;
+    rt_uint32_t pcount = 0, last_pcount = 0;
+    rt_uint32_t lost, total;
+    rt_tick_t tick1, tick2;
+    float f;
+    char speed[64] = { 0 };
+    struct timeval timeout;
+
+    buffer = malloc(IPERF_BUFSZ);
+    if (buffer == NULL)
+    {
+        return;
+    }
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
+    if(sock < 0)
+    {
+        rt_kprintf("can't create socket!! exit\n");
+        return;
+    }
+    server.sin_family = PF_INET;
+    server.sin_port = htons(param.port);
+    server.sin_addr.s_addr = inet_addr("0.0.0.0");
+
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+    {
+        rt_kprintf("setsockopt failed!!");
+        closesocket(sock);
+        free(buffer);
+        return;
+    }
+    if (bind(sock, (struct sockaddr *)&server, sizeof(struct sockaddr_in)) < 0)
+    {
+        rt_kprintf("iperf server bind failed!! exit\n");
+        closesocket(sock);
+        free(buffer);
+        return;
+    }
+    while (param.mode != IPERF_MODE_STOP)
+    {
+        tick1 = rt_tick_get();
+        tick2 = tick1;
+        lost = 0;
+        total = 0;
+        sentlen = 0;
+        while ((tick2 - tick1) < (RT_TICK_PER_SECOND * 5))
+        {
+            r_size = recvfrom(sock, buffer, IPERF_BUFSZ, 0, (struct sockaddr *)&sender, (socklen_t*)&sender_len);
+            if (r_size > 12)
+            {
+                pcount = ntohl(buffer[0]);
+                if (last_pcount < pcount)
+                {
+                    lost += pcount - last_pcount - 1;
+                    total += pcount - last_pcount;
+                }
+                else
+                {
+                    last_pcount = pcount;
+                }
+                last_pcount = pcount;
+                sentlen += r_size;
+            }
+            tick2 = rt_tick_get();
+        }
+        if (sentlen > 0)
+        {
+            f = (float)(sentlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1));
+            f /= 1000.0f;
+            snprintf(speed, sizeof(speed), "%.4f Mbps! lost:%d total:%d\n", f, lost, total);
+            rt_kprintf("%s", speed);
+        }
+    }
+    free(buffer);
+    closesocket(sock);
+}
+
 static void iperf_client(void *thread_param)
 {
     int i;
     int sock;
     int ret;
-
+    int tips = 1;
     uint8_t *send_buf;
     rt_uint64_t sentlen;
     rt_tick_t tick1, tick2;
@@ -71,9 +195,12 @@ static void iperf_client(void *thread_param)
         ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
         if (ret == -1)
         {
-            rt_kprintf("Connect failed!\n");
+            if (tips)
+            {
+                rt_kprintf("Connect to iperf server faile, Waiting for the server to open!\n");
+                tips = 0;
+            }
             closesocket(sock);
-
             rt_thread_delay(RT_TICK_PER_SECOND);
             continue;
         }
@@ -120,8 +247,10 @@ static void iperf_client(void *thread_param)
         closesocket(sock);
 
         rt_thread_delay(RT_TICK_PER_SECOND * 2);
-        rt_kprintf("disconnected!\n");
+        rt_kprintf("Disconnected, iperf server shut down!\n");
+        tips = 1;
     }
+    free(send_buf);
 }
 
 void iperf_server(void *thread_param)
@@ -217,7 +346,8 @@ void iperf_server(void *thread_param)
                 recvlen = 0;
             }
         }
-
+        rt_kprintf("client disconnected (%s, %d)\n",
+                   inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         if (connected >= 0) closesocket(connected);
         connected = -1;
     }
@@ -244,8 +374,8 @@ void iperf_usage(void)
     rt_kprintf("Miscellaneous:\n");
     rt_kprintf("  -h           print this message and quit\n");
     rt_kprintf("  --stop       stop iperf program\n");
-
-    return ;
+    rt_kprintf("  -u           testing UDP protocol");
+    return;
 }
 
 int iperf(int argc, char **argv)
@@ -253,53 +383,60 @@ int iperf(int argc, char **argv)
     int mode = 0; /* server mode */
     char *host = NULL;
     int port = IPERF_PORT;
+    int use_udp = 0;
+    int index = 1;
 
-    if (argc == 1) goto __usage;
-    else
+    if (argc == 1)
     {
-        if (strcmp(argv[1], "-h") == 0) goto __usage;
-        else if (strcmp(argv[1], "--stop") == 0)
-        {
-            /* stop iperf */
-            param.mode = IPERF_MODE_STOP;
-            return 0;
-        }
-        else if (strcmp(argv[1], "-s") == 0)
-        {
-            mode = IPERF_MODE_SERVER; /* server mode */
-
-            /* iperf -s -p 5000 */
-            if (argc == 4)
-            {
-                if (strcmp(argv[2], "-p") == 0)
-                {
-                    port = atoi(argv[3]);
-                }
-                else goto __usage;
-            }
-        }
-        else if (strcmp(argv[1], "-c") == 0)
-        {
-            mode = IPERF_MODE_CLIENT; /* client mode */
-            if (argc < 3) goto __usage;
-
-            host = argv[2];
-            if (argc == 5)
-            {
-                /* iperf -c host -p port */
-                if (strcmp(argv[3], "-p") == 0)
-                {
-                    port = atoi(argv[4]);
-                }
-                else goto __usage;
-            }
-        }
-        else if (strcmp(argv[1], "-h") == 0)
-        {
-            goto __usage;
-        }
-        else goto __usage;
+        goto __usage;
     }
+    if (strcmp(argv[1], "-u") == 0)
+    {
+        index = 2;
+        use_udp = 1;
+    }
+    if (strcmp(argv[index], "-h") == 0) goto __usage;
+    else if (strcmp(argv[index], "--stop") == 0)
+    {
+        /* stop iperf */
+        param.mode = IPERF_MODE_STOP;
+        return 0;
+    }
+    else if (strcmp(argv[index], "-s") == 0)
+    {
+        mode = IPERF_MODE_SERVER; /* server mode */
+
+        /* iperf -s -p 5000 */
+        if ((argc == 4) || (argc == 5))
+        {
+            if (strcmp(argv[index + 1], "-p") == 0)
+            {
+                port = atoi(argv[index + 2]);
+            }
+            else goto __usage;
+        }
+    }
+    else if (strcmp(argv[index], "-c") == 0)
+    {
+        mode = IPERF_MODE_CLIENT; /* client mode */
+        if (argc < 3) goto __usage;
+
+        host = argv[index + 1];
+        if ((argc == 5) || (argc == 6))
+        {
+            /* iperf -c host -p port */
+            if (strcmp(argv[index + 2], "-p") == 0)
+            {
+                port = atoi(argv[index + 3]);
+            }
+            else goto __usage;
+        }
+    }
+    else if (strcmp(argv[index], "-h") == 0)
+    {
+        goto __usage;
+    }
+    else goto __usage;
 
     /* start iperf */
     if (param.mode == IPERF_MODE_STOP)
@@ -315,13 +452,32 @@ int iperf(int argc, char **argv)
         }
         if (host) param.host = rt_strdup(host);
 
-        if (mode == IPERF_MODE_CLIENT)
-            tid = rt_thread_create("iperfc", iperf_client, RT_NULL,
+        if (use_udp)
+        {
+            if (mode == IPERF_MODE_CLIENT)
+            {
+                tid = rt_thread_create("iperfc", iperf_udp_client, RT_NULL,
                                    2048, 20, 20);
-        else if (mode == IPERF_MODE_SERVER)
-            tid = rt_thread_create("iperfd", iperf_server, RT_NULL,
+            }
+            else if (mode == IPERF_MODE_SERVER)
+            {
+                tid = rt_thread_create("iperfd", iperf_udp_server, RT_NULL,
+                                   2048, 10, 20);
+            }
+        }
+        else
+        {
+            if (mode == IPERF_MODE_CLIENT)
+            {
+                tid = rt_thread_create("iperfc", iperf_client, RT_NULL,
                                    2048, 20, 20);
-
+            }
+            else if (mode == IPERF_MODE_SERVER)
+            {
+                tid = rt_thread_create("iperfd", iperf_server, RT_NULL,
+                                   2048, 20, 20);
+            }
+        }
         if (tid) rt_thread_startup(tid);
     }
     else
