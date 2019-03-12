@@ -85,7 +85,12 @@ static void ping_prepare_echo( struct icmp_echo_hdr *iecho, u16_t len)
         ((char*) iecho)[sizeof(struct icmp_echo_hdr) + i] = (char) i;
     }
 
-    iecho->chksum = inet_chksum(iecho, len);
+#ifdef RT_LWIP_USING_HW_CHECKSUM
+      iecho->chksum = 0;
+#else
+      iecho->chksum = inet_chksum(iecho, len);
+#endif
+
 }
 
 /* Ping using the socket ip */
