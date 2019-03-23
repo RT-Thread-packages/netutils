@@ -39,6 +39,18 @@
 #define NTP_HOSTNAME                   NETUTILS_NTP_HOSTNAME
 #endif
 
+#ifdef NETUTILS_NTP_HOSTNAME2
+#define NTP_HOSTNAME2                   NETUTILS_NTP_HOSTNAME2
+#else
+#define NTP_HOSTNAME2                   RT_NULL
+#endif
+
+#ifdef NETUTILS_NTP_HOSTNAME3
+#define NTP_HOSTNAME3                   NETUTILS_NTP_HOSTNAME3
+#else
+#define NTP_HOSTNAME3                   RT_NULL
+#endif
+
 #define NTP_TIMESTAMP_DELTA            2208988800ull
 #define NTP_GET_TIMEOUT                5
 
@@ -60,9 +72,9 @@
 typedef struct {
 
     uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
-                         // li.   Two bits.   Leap indicator.
-                         // vn.   Three bits. Version number of the protocol.
-                         // mode. Three bits. Client will pick mode 3 for client.
+                             // li.   Two bits.   Leap indicator.
+                             // vn.   Three bits. Version number of the protocol.
+                             // mode. Three bits. Client will pick mode 3 for client.
 
     uint8_t stratum;         // Eight bits. Stratum level of the local clock.
     uint8_t poll;            // Eight bits. Maximum interval between successive messages.
@@ -100,114 +112,140 @@ static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
  */
 time_t ntp_get_time(const char *host_name)
 {
-    int sockfd, n; // Socket file descriptor and the n return result from writing/reading from the socket.
+    int sockfd, n;
 
-    int portno = 123; // NTP UDP port number.
+    /* NTP UDP port number. */
+    int portno = 123;
+    struct hostent *server;
+    struct sockaddr_in serv_addr[3];
 
+    int server_num = 1;
+    rt_tick_t start = 0;
     time_t new_time = 0;
-    struct timeval timeout;
+    int addr_len = sizeof(struct sockaddr_in);
 
-    // Using default host name when host_name is NULL
+    /* Using default host name when host_name is NULL */
     if (host_name == NULL)
     {
         host_name = NTP_HOSTNAME;
     }
 
-    // Create and zero out the packet. All 48 bytes worth.
+    server = gethostbyname(host_name);
+    if (server == NULL)
+    {
+        ntp_error("no such host");
+        server_num --;
+    }
+    else
+    {
+        /* Zero out the server address structure. */
+        memset((char *) &serv_addr[server_num - 1], 0, addr_len);
+        
+        serv_addr[server_num - 1].sin_family = AF_INET;
+        
+        /* Convert the port number integer to network big-endian style and save it to the server address structure. */
+        serv_addr[server_num - 1].sin_port = htons(portno);
+        
+        /* Copy the server's IP address to the server address structure. */
+        memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+    }
+    
+    if (NTP_HOSTNAME2 != NULL)
+    {
+        server_num++;
+        server = gethostbyname(NTP_HOSTNAME2);
+        if (server == NULL)
+        {
+            ntp_error("no such host");
+            server_num --;
+        }
+        else
+        {
+            /* Zero out the server address structure. */
+            memset((char *) &serv_addr[server_num - 1], 0, addr_len);
+            
+            serv_addr[server_num - 1].sin_family = AF_INET;
+            
+            /* Convert the port number integer to network big-endian style and save it to the server address structure. */
+            serv_addr[server_num - 1].sin_port = htons(portno);
+            /* Copy the server's IP address to the server address structure. */
+            memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+        }
+    }
 
+    if (NTP_HOSTNAME3 != NULL)
+    {
+        server_num++;
+        server = gethostbyname(NTP_HOSTNAME3);
+        if (server == NULL)
+        {
+            ntp_error("no such host");
+            server_num --;
+        }
+        else
+        {
+            /* Zero out the server address structure. */
+            memset((char *) &serv_addr[server_num - 1], 0, addr_len);
+            
+            serv_addr[server_num - 1].sin_family = AF_INET;
+            
+            /* Convert the port number integer to network big-endian style and save it to the server address structure. */
+            serv_addr[server_num - 1].sin_port = htons(portno);
+            /* Copy the server's IP address to the server address structure. */
+            memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+        }
+    }
+
+    /* Create and zero out the packet. All 48 bytes worth. */
     memset(&packet, 0, sizeof(ntp_packet));
 
-    // Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
+    /* Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
+       Represents 27 in base 10 or 00011011 in base 2. */
+    *((char *) &packet + 0) = 0x1b;
 
-    *((char *) &packet + 0) = 0x1b; // Represents 27 in base 10 or 00011011 in base 2.
-
-    // Create a UDP socket, convert the host-name to an IP address, set the port number,
-    // connect to the server, send the packet, and then read in the return packet.
-
-    struct sockaddr_in serv_addr; // Server address data structure.
-    struct hostent *server;      // Server data structure.
-
-    sockfd = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP); // Create a UDP socket.
-
-    if (sockfd < 0) {
+    /* Create a UDP socket. */
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);  
+    if (sockfd < 0)
+    {
         ntp_error("opening socket");
         return 0;
     }
 
-    timeout.tv_sec = NTP_GET_TIMEOUT;
-    timeout.tv_usec = 0;
-
-    /* set receive and send timeout option */
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (void *) &timeout,
-               sizeof(timeout));
-    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (void *) &timeout,
-               sizeof(timeout));
-
-    server = gethostbyname(host_name); // Convert URL to IP.
-
-    if (server == NULL) {
-        ntp_error("no such host");
-        goto __exit;
+    /* Send it the NTP packet it wants. If n == -1, it failed. */
+    for (int i = 0; i < server_num; i++)
+    {
+        n = sendto(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)&serv_addr[i], addr_len);
     }
 
-    // Zero out the server address structure.
-
-    memset((char *) &serv_addr, 0, sizeof(serv_addr));
-
-    serv_addr.sin_family = AF_INET;
-
-    // Copy the server's IP address to the server address structure.
-
-    memcpy((char *) &serv_addr.sin_addr.s_addr, (char *) server->h_addr, server->h_length);
-
-    // Convert the port number integer to network big-endian style and save it to the server address structure.
-
-    serv_addr.sin_port = htons(portno);
-
-    // Call up the server using its IP address and port number.
-
-    if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-        ntp_error("connecting");
-        goto __exit;
-    }
-
-    // Send it the NTP packet it wants. If n == -1, it failed.
-
-    n = send(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
-
-    if (n < 0) {
-        ntp_error("writing to socket");
-        goto __exit;
-    }
-
-    // Wait and receive the packet back from the server. If n == -1, it failed.
-
-    n = recv(sockfd, (char*) &packet, sizeof(ntp_packet), 0);
-
-    if (n < 0) {
-        if (errno == EWOULDBLOCK || errno == EAGAIN) {
-            ntp_error("receive the socket timeout(%ds)", NTP_GET_TIMEOUT);
-        } else {
-            ntp_error("reading from socket, error code %d.", n);
+    start = rt_tick_get();
+    while (rt_tick_get() <= start + NTP_GET_TIMEOUT)
+    {
+        for (int i = 0; i < server_num; i++)
+        {
+            /* receive the packet back from the server. If n == -1, it failed. */
+            n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (struct sockaddr *)&serv_addr[i], (socklen_t *)&addr_len);
+            if (n < 0)
+            {
+                ntp_error("reading from server %d, error code %d.", i, n);
+            }
+            else
+            {
+                break;
+            }
         }
-        goto __exit;
     }
 
-    // These two fields contain the time-stamp seconds as the packet left the NTP server.
-    // The number of seconds correspond to the seconds passed since 1900.
-    // ntohl() converts the bit/byte order from the network's to host's "endianness".
-
+    /* These two fields contain the time-stamp seconds as the packet left the NTP server.
+       The number of seconds correspond to the seconds passed since 1900.
+       ntohl() converts the bit/byte order from the network's to host's "endianness". */
     packet.txTm_s = ntohl(packet.txTm_s); // Time-stamp seconds.
     packet.txTm_f = ntohl(packet.txTm_f); // Time-stamp fraction of a second.
 
-    // Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
-    // Subtract 70 years worth of seconds from the seconds since 1900.
-    // This leaves the seconds since the UNIX epoch of 1970.
-    // (1900)------------------(1970)**************************************(Time Packet Left the Server)
-
-    new_time = (time_t) (packet.txTm_s - NTP_TIMESTAMP_DELTA);
-
-__exit:
+    /* Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
+       Subtract 70 years worth of seconds from the seconds since 1900.
+       This leaves the seconds since the UNIX epoch of 1970.
+       (1900)------------------(1970)**************************************(Time Packet Left the Server) */
+    new_time = (time_t)(packet.txTm_s - NTP_TIMESTAMP_DELTA);
 
     closesocket(sockfd);
 
@@ -273,7 +311,7 @@ static void ntp_sync(const char *host_name)
 
     if (cur_time)
     {
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t*) &cur_time));
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 
 #ifdef RT_USING_RTC
         rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
