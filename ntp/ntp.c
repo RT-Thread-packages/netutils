@@ -42,13 +42,13 @@
 #ifdef NETUTILS_NTP_HOSTNAME2
 #define NTP_HOSTNAME2                   NETUTILS_NTP_HOSTNAME2
 #else
-#define NTP_HOSTNAME2                   RT_NULL
+#define NTP_HOSTNAME2                   NULL
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME3
 #define NTP_HOSTNAME3                   NETUTILS_NTP_HOSTNAME3
 #else
-#define NTP_HOSTNAME3                   RT_NULL
+#define NTP_HOSTNAME3                   NULL
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
@@ -100,6 +100,27 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+static void copy_server_addr(struct sockaddr_in* serv_addr,struct hostent *server)
+{
+    /* NTP UDP port number. */
+    int portno = 123;
+    socklen_t addr_len = sizeof(struct sockaddr_in);
+    
+    RT_ASSERT(serv_addr);
+    RT_ASSERT(server);
+
+    /* Zero out the server address structure. */
+    memset((char *)serv_addr, 0, addr_len);
+    
+    serv_addr->sin_family = AF_INET;
+    
+    /* Convert the port number integer to network big-endian style and save it to the server address structure. */
+    serv_addr->sin_port = htons(portno);
+    
+    /* Copy the server's IP address to the server address structure. */
+    memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+}
+
 /**
  * Get the UTC time from NTP server
  *
@@ -114,15 +135,13 @@ time_t ntp_get_time(const char *host_name)
 {
     int sockfd, n;
 
-    /* NTP UDP port number. */
-    int portno = 123;
     struct hostent *server;
     struct sockaddr_in serv_addr[3];
 
     int server_num = 1;
     rt_tick_t start = 0;
     time_t new_time = 0;
-    int addr_len = sizeof(struct sockaddr_in);
+    socklen_t addr_len = sizeof(struct sockaddr_in);
 
     /* Using default host name when host_name is NULL */
     if (host_name == NULL)
@@ -138,16 +157,7 @@ time_t ntp_get_time(const char *host_name)
     }
     else
     {
-        /* Zero out the server address structure. */
-        memset((char *) &serv_addr[server_num - 1], 0, addr_len);
-        
-        serv_addr[server_num - 1].sin_family = AF_INET;
-        
-        /* Convert the port number integer to network big-endian style and save it to the server address structure. */
-        serv_addr[server_num - 1].sin_port = htons(portno);
-        
-        /* Copy the server's IP address to the server address structure. */
-        memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+        copy_server_addr(&serv_addr[server_num - 1],server);
     }
     
     if (NTP_HOSTNAME2 != NULL)
@@ -161,15 +171,7 @@ time_t ntp_get_time(const char *host_name)
         }
         else
         {
-            /* Zero out the server address structure. */
-            memset((char *) &serv_addr[server_num - 1], 0, addr_len);
-            
-            serv_addr[server_num - 1].sin_family = AF_INET;
-            
-            /* Convert the port number integer to network big-endian style and save it to the server address structure. */
-            serv_addr[server_num - 1].sin_port = htons(portno);
-            /* Copy the server's IP address to the server address structure. */
-            memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+            copy_server_addr(&serv_addr[server_num - 1],server);
         }
     }
 
@@ -184,15 +186,7 @@ time_t ntp_get_time(const char *host_name)
         }
         else
         {
-            /* Zero out the server address structure. */
-            memset((char *) &serv_addr[server_num - 1], 0, addr_len);
-            
-            serv_addr[server_num - 1].sin_family = AF_INET;
-            
-            /* Convert the port number integer to network big-endian style and save it to the server address structure. */
-            serv_addr[server_num - 1].sin_port = htons(portno);
-            /* Copy the server's IP address to the server address structure. */
-            memcpy(&serv_addr[server_num - 1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+            copy_server_addr(&serv_addr[server_num - 1],server);
         }
     }
 
@@ -222,8 +216,8 @@ time_t ntp_get_time(const char *host_name)
     {
         for (int i = 0; i < server_num; i++)
         {
-            /* receive the packet back from the server. If n == -1, it failed. */
-            n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (struct sockaddr *)&serv_addr[i], (socklen_t *)&addr_len);
+            /* non-blocking receive the packet back from the server. If n == -1, it failed. */
+            n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), MSG_DONTWAIT, (struct sockaddr *)&serv_addr[i], &addr_len);
             if (n < 0)
             {
                 ntp_error("reading from server %d, error code %d.", i, n);
