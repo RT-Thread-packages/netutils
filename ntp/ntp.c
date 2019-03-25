@@ -31,6 +31,10 @@
 #include <netdb.h>
 #include <rtdevice.h>
 
+#define DBG_SECTION_NAME               "ntp"
+#define DBG_LEVEL                      DBG_INFO
+#include <rtdbg.h>
+
 #ifdef NETUTILS_NTP_TIMEZONE
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
 #endif
@@ -65,8 +69,6 @@
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
-
-#define ntp_error(...)                 rt_kprintf("\033[31;22m[E/NTP]: ERROR ");rt_kprintf(__VA_ARGS__);rt_kprintf("\033[0m\n")
 
 // Structure that defines the 48 byte NTP packet protocol.
 typedef struct {
@@ -152,7 +154,7 @@ time_t ntp_get_time(const char *host_name)
     server = gethostbyname(host_name);
     if (server == NULL)
     {
-        ntp_error("no such host");
+        LOG_I("no such host(%s)", host_name);
         server_num --;
     }
     else
@@ -166,7 +168,7 @@ time_t ntp_get_time(const char *host_name)
         server = gethostbyname(NTP_HOSTNAME2);
         if (server == NULL)
         {
-            ntp_error("no such host");
+            LOG_I("no such host(%s)", NTP_HOSTNAME2);
             server_num --;
         }
         else
@@ -181,7 +183,7 @@ time_t ntp_get_time(const char *host_name)
         server = gethostbyname(NTP_HOSTNAME3);
         if (server == NULL)
         {
-            ntp_error("no such host");
+            LOG_I("no such host(%s)", NTP_HOSTNAME3);
             server_num --;
         }
         else
@@ -201,7 +203,7 @@ time_t ntp_get_time(const char *host_name)
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);  
     if (sockfd < 0)
     {
-        ntp_error("opening socket");
+        LOG_E("create socket failed");
         return 0;
     }
 
@@ -212,7 +214,7 @@ time_t ntp_get_time(const char *host_name)
     }
 
     start = rt_tick_get();
-    while (rt_tick_get() <= start + NTP_GET_TIMEOUT)
+    while (rt_tick_get() <= start + NTP_GET_TIMEOUT && server_num > 0)
     {
         for (int i = 0; i < server_num; i++)
         {
@@ -220,7 +222,7 @@ time_t ntp_get_time(const char *host_name)
             n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), MSG_DONTWAIT, (struct sockaddr *)&serv_addr[i], &addr_len);
             if (n < 0)
             {
-                ntp_error("reading from server %d, error code %d.", i, n);
+                LOG_D("reading from server %d, error code %d.", i, n);
             }
             else
             {
@@ -305,12 +307,12 @@ static void ntp_sync(const char *host_name)
 
     if (cur_time)
     {
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
+        LOG_RAW("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 
 #ifdef RT_USING_RTC
-        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
+        LOG_RAW("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
 #else
-        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
+        LOG_RAW("The system time update failed. Please enable RT_USING_RTC.\n");
 #endif /* RT_USING_RTC */
 
     }
