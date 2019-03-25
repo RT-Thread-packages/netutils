@@ -154,7 +154,7 @@ time_t ntp_get_time(const char *host_name)
     server = gethostbyname(host_name);
     if (server == NULL)
     {
-        LOG_I("no such host(%s)", host_name);
+        LOG_W("no such host(%s)", host_name);
         server_num --;
     }
     else
@@ -168,7 +168,7 @@ time_t ntp_get_time(const char *host_name)
         server = gethostbyname(NTP_HOSTNAME2);
         if (server == NULL)
         {
-            LOG_I("no such host(%s)", NTP_HOSTNAME2);
+            LOG_W("no such host(%s)", NTP_HOSTNAME2);
             server_num --;
         }
         else
@@ -183,13 +183,18 @@ time_t ntp_get_time(const char *host_name)
         server = gethostbyname(NTP_HOSTNAME3);
         if (server == NULL)
         {
-            LOG_I("no such host(%s)", NTP_HOSTNAME3);
+            LOG_W("no such host(%s)", NTP_HOSTNAME3);
             server_num --;
         }
         else
         {
             copy_server_addr(&serv_addr[server_num - 1],server);
         }
+    }
+
+    if(server_num <= 0)
+    {
+        goto __exit;
     }
 
     /* Create and zero out the packet. All 48 bytes worth. */
@@ -214,37 +219,50 @@ time_t ntp_get_time(const char *host_name)
     }
 
     start = rt_tick_get();
-    while (rt_tick_get() <= start + NTP_GET_TIMEOUT && server_num > 0)
+    while (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         for (int i = 0; i < server_num; i++)
         {
             /* non-blocking receive the packet back from the server. If n == -1, it failed. */
             n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), MSG_DONTWAIT, (struct sockaddr *)&serv_addr[i], &addr_len);
-            if (n < 0)
+            if (n <= 0)
             {
-                LOG_D("reading from server %d, error code %d.", i, n);
+                LOG_D("reading from server %s, error code %d.", inet_ntoa(serv_addr[i].sin_addr.s_addr), n);
             }
-            else
+            else if (n > 0)
             {
                 break;
             }
         }
+        
+        if(n > 0)
+        {
+            break;
+        }
     }
+    
+    if(rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    {
+        /* These two fields contain the time-stamp seconds as the packet left the NTP server.
+           The number of seconds correspond to the seconds passed since 1900.
+           ntohl() converts the bit/byte order from the network's to host's "endianness". */
+        packet.txTm_s = ntohl(packet.txTm_s); // Time-stamp seconds.
+        packet.txTm_f = ntohl(packet.txTm_f); // Time-stamp fraction of a second.
 
-    /* These two fields contain the time-stamp seconds as the packet left the NTP server.
-       The number of seconds correspond to the seconds passed since 1900.
-       ntohl() converts the bit/byte order from the network's to host's "endianness". */
-    packet.txTm_s = ntohl(packet.txTm_s); // Time-stamp seconds.
-    packet.txTm_f = ntohl(packet.txTm_f); // Time-stamp fraction of a second.
-
-    /* Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
-       Subtract 70 years worth of seconds from the seconds since 1900.
-       This leaves the seconds since the UNIX epoch of 1970.
-       (1900)------------------(1970)**************************************(Time Packet Left the Server) */
-    new_time = (time_t)(packet.txTm_s - NTP_TIMESTAMP_DELTA);
+        /* Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
+           Subtract 70 years worth of seconds from the seconds since 1900.
+           This leaves the seconds since the UNIX epoch of 1970.
+           (1900)------------------(1970)**************************************(Time Packet Left the Server) */
+        new_time = (time_t)(packet.txTm_s - NTP_TIMESTAMP_DELTA);
+    }
+    else
+    {
+        LOG_E("read data from the server timed out");
+    }
 
     closesocket(sockfd);
 
+__exit:
     return new_time;
 }
 
