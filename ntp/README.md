@@ -8,6 +8,8 @@
 
 ## 2、使用
 
+首先打开 meunconfig ，配置并开启 netutils 软件包。在配置选项中，默认提供了 3 个 NTP 服务器，保证了 NTP 功能的可靠性。
+
 ### 2.1 获取 UTC 时间
 
 [UTC 时间](https://baike.baidu.com/item/%E5%8D%8F%E8%B0%83%E4%B8%96%E7%95%8C%E6%97%B6/787659?fromtitle=UTC&fromid=5899996) 又称世界统一时间、世界标准时间、国际协调时间。北京时间为 UTC+8 时间，比 UTC 时间多 8 小时，或者理解为早 8 小时。

@@ -58,7 +58,6 @@
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
-#define NTP_GET_TIMEOUT                5
 
 #ifndef NTP_TIMEZONE
 #define NTP_TIMEZONE                   8
@@ -100,7 +99,7 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static void sendto_ntp_server(int *sockfd, const char *host_name, struct sockaddr_in *serv_addr, int *server_num)
+static int sendto_ntp_server(int *sockfd, const char *host_name, struct sockaddr_in *serv_addr)
 {
     struct hostent *server;
     socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -110,7 +109,8 @@ static void sendto_ntp_server(int *sockfd, const char *host_name, struct sockadd
     server = gethostbyname(host_name);
     if (server == NULL)
     {
-        LOG_W("no such host(%s)", host_name);
+        LOG_W("No such host(%s)", host_name);
+        return -RT_ERROR;
     }
     else
     {
@@ -125,9 +125,7 @@ static void sendto_ntp_server(int *sockfd, const char *host_name, struct sockadd
         /* Copy the server's IP address to the server address structure. */
         memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
 
-        sendto(*sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
-
-        *server_num += 1;
+        return sendto(*sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
     }
 }
 
@@ -144,16 +142,15 @@ static void sendto_ntp_server(int *sockfd, const char *host_name, struct sockadd
  */
 time_t ntp_get_time(const char *host_name)
 {
-/* the delay between two receive */
-#define RECV_TIME_DELAY                10
+/* the delay(ms) between two receive */
+#define RECV_TIME_DELAY_MS             10
+/* NTP receive timeout(S) */
+#define NTP_GET_TIMEOUT                5
 /* number of NTP servers */
 #define NTP_SERVER_NUM                 3
 
-    int sockfd, n;
+    int sockfd, n, i = 0, server_num = 0;
     struct sockaddr_in serv_addr[NTP_SERVER_NUM];
-
-    int i = 0;
-    int server_num = 0;
     rt_tick_t start = 0;
     time_t new_time = 0;
     socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -170,56 +167,60 @@ time_t ntp_get_time(const char *host_name)
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sockfd < 0)
     {
-        LOG_E("create socket failed");
+        LOG_E("Create socket failed");
         return 0;
     }
 
     if (host_name)
     {
         /* access the incoming host_name server */
-        sendto_ntp_server(&sockfd, host_name, serv_addr, &server_num);
+        if (sendto_ntp_server(&sockfd, host_name, serv_addr) >= 0)
+        {
+            server_num = 1;
+        }
     }
     else
     {
-        /* use the default NTP server */
+        /* use the static default NTP server */
         for (i = 0; i < NTP_SERVER_NUM; i++)
         {
             if (host_name_buf[i] == NULL || strlen(host_name_buf[i]) == 0)
                 continue;
 
-            sendto_ntp_server(&sockfd, host_name_buf[i], &serv_addr[server_num], &server_num);
+            if (sendto_ntp_server(&sockfd, host_name_buf[i], &serv_addr[server_num]) >= 0)
+            {
+                server_num ++;
+            }
         }
     }
 
     if (server_num <= 0)
     {
-        goto __exit;
+        closesocket(sockfd);
+        return 0;
     }
 
     start = rt_tick_get();
     while (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
-        for (int i = 0; i < server_num; i++)
+        for (i = 0; i < server_num; i++)
         {
             /* non-blocking receive the packet back from the server. If n == -1, it failed. */
             n = recvfrom(sockfd, (char *) &packet, sizeof(ntp_packet), MSG_DONTWAIT, (struct sockaddr *)&serv_addr[i], &addr_len);
             if (n <= 0)
             {
-                LOG_D("reading from server %s, error code %d.", inet_ntoa(serv_addr[i].sin_addr.s_addr), n);
+                LOG_D("Reading from server %s error (%d).", inet_ntoa(serv_addr[i].sin_addr.s_addr), n);
             }
             else if (n > 0)
             {
-                break;
+                goto __exit;
             }
         }
 
-        if (n > 0)
-        {
-            break;
-        }
-
-        rt_thread_mdelay(RECV_TIME_DELAY);
+        rt_thread_mdelay(RECV_TIME_DELAY_MS);
     }
+
+__exit:
 
     if (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
@@ -237,10 +238,9 @@ time_t ntp_get_time(const char *host_name)
     }
     else
     {
-        LOG_E("read data from the server timed out");
+        LOG_E("Receive the socket from server timeout.");
     }
 
-__exit:
     closesocket(sockfd);
 
     return new_time;
@@ -305,12 +305,12 @@ static void ntp_sync(const char *host_name)
 
     if (cur_time)
     {
-        LOG_RAW("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 
 #ifdef RT_USING_RTC
-        LOG_RAW("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
+        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
 #else
-        LOG_RAW("The system time update failed. Please enable RT_USING_RTC.\n");
+        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
 #endif /* RT_USING_RTC */
 
     }
