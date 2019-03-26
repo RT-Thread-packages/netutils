@@ -39,8 +39,8 @@
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
 #endif
 
-#ifdef NETUTILS_NTP_HOSTNAME1
-#define NTP_HOSTNAME1                   NETUTILS_NTP_HOSTNAME1
+#ifdef NETUTILS_NTP_HOSTNAME
+#define NTP_HOSTNAME1                   NETUTILS_NTP_HOSTNAME
 #else
 #define NTP_HOSTNAME1                   NULL
 #endif
@@ -67,9 +67,6 @@
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
-
-#define HOST_NAME_LEN                  16
-#define RECV_TIME_DELAY                10
 
 // Structure that defines the 48 byte NTP packet protocol.
 typedef struct {
@@ -103,6 +100,38 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+static void sendto_ntp_server(int *sockfd, const char *host_name, struct sockaddr_in *serv_addr, int *server_num)
+{
+    struct hostent *server;
+    socklen_t addr_len = sizeof(struct sockaddr_in);
+    /* NTP UDP port number. */
+    int portno = 123;
+    
+    server = gethostbyname(host_name);
+    if (server == NULL)
+    {
+        LOG_W("no such host(%s)", host_name);
+    }
+    else
+    {
+        /* Zero out the server address structure. */
+        memset((char *)serv_addr, 0, addr_len);
+
+        serv_addr->sin_family = AF_INET;
+
+        /* Convert the port number integer to network big-endian style and save it to the server address structure. */
+        serv_addr->sin_port = htons(portno);
+
+        /* Copy the server's IP address to the server address structure. */
+        memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+
+        sendto(*sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
+
+        *server_num += 1;
+    }
+}
+
+
 /**
  * Get the UTC time from NTP server
  *
@@ -115,24 +144,20 @@ static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
  */
 time_t ntp_get_time(const char *host_name)
 {
+/* the delay between two receive */
+#define RECV_TIME_DELAY                10
+/* number of NTP servers */
+#define NTP_SERVER_NUM                 3
+
     int sockfd, n;
+    struct sockaddr_in serv_addr[NTP_SERVER_NUM];
 
-    struct hostent *server;
-    struct sockaddr_in serv_addr[3];
-
-    /* NTP UDP port number. */
-    int portno = 123;
+    int i = 0;
     int server_num = 0;
     rt_tick_t start = 0;
     time_t new_time = 0;
     socklen_t addr_len = sizeof(struct sockaddr_in);
-    const char host_name_buf[3][HOST_NAME_LEN] = {NTP_HOSTNAME1, NTP_HOSTNAME2, NTP_HOSTNAME3};
-
-    /* Using default host name when host_name is NULL */
-    if (host_name != NULL)
-    {
-        memcpy((void *)&host_name_buf[0], host_name, HOST_NAME_LEN);
-    }
+    const char *const host_name_buf[NTP_SERVER_NUM] = {NTP_HOSTNAME1, NTP_HOSTNAME2, NTP_HOSTNAME3};
 
     /* Create and zero out the packet. All 48 bytes worth. */
     memset(&packet, 0, sizeof(ntp_packet));
@@ -140,45 +165,33 @@ time_t ntp_get_time(const char *host_name)
     /* Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
        Represents 27 in base 10 or 00011011 in base 2. */
     *((char *) &packet + 0) = 0x1b;
-    
+
     /* Create a UDP socket. */
-    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);  
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sockfd < 0)
     {
         LOG_E("create socket failed");
         return 0;
     }
 
-    for(int i = 0; i < 3; i++)
+    if (host_name)
     {
-        if(strlen(host_name_buf[i]) == 0)
-            continue;
+        /* access the incoming host_name server */
+        sendto_ntp_server(&sockfd, host_name, serv_addr, &server_num);
+    }
+    else
+    {
+        /* use the default NTP server */
+        for (i = 0; i < NTP_SERVER_NUM; i++)
+        {
+            if (host_name_buf[i] == NULL || strlen(host_name_buf[i]) == 0)
+                continue;
 
-        server = gethostbyname((const char *)&host_name_buf[i]);
-        if (server == NULL)
-        {
-            LOG_W("no such host(%s)", host_name);
-        }
-        else
-        {
-            server_num++;
-            
-            /* Zero out the server address structure. */
-            memset((char *)&serv_addr[server_num-1], 0, addr_len);
-            
-            serv_addr[server_num-1].sin_family = AF_INET;
-            
-            /* Convert the port number integer to network big-endian style and save it to the server address structure. */
-            serv_addr[server_num-1].sin_port = htons(portno);
-            
-            /* Copy the server's IP address to the server address structure. */
-            memcpy(&serv_addr[server_num-1].sin_addr.s_addr, (char *) server->h_addr, server->h_length);
-            
-            sendto(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)&serv_addr[server_num - 1], addr_len);
+            sendto_ntp_server(&sockfd, host_name_buf[i], &serv_addr[server_num], &server_num);
         }
     }
 
-    if(server_num <= 0)
+    if (server_num <= 0)
     {
         goto __exit;
     }
@@ -199,16 +212,16 @@ time_t ntp_get_time(const char *host_name)
                 break;
             }
         }
-        
-        if(n > 0)
+
+        if (n > 0)
         {
             break;
         }
-        
+
         rt_thread_mdelay(RECV_TIME_DELAY);
     }
 
-    if(rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    if (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         /* These two fields contain the time-stamp seconds as the packet left the NTP server.
            The number of seconds correspond to the seconds passed since 1900.
