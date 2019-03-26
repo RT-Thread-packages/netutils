@@ -40,21 +40,21 @@
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME
-#define NTP_HOSTNAME1                   NETUTILS_NTP_HOSTNAME
+#define NTP_HOSTNAME1                  NETUTILS_NTP_HOSTNAME
 #else
-#define NTP_HOSTNAME1                   NULL
+#define NTP_HOSTNAME1                  NULL
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME2
-#define NTP_HOSTNAME2                   NETUTILS_NTP_HOSTNAME2
+#define NTP_HOSTNAME2                  NETUTILS_NTP_HOSTNAME2
 #else
-#define NTP_HOSTNAME2                   NULL
+#define NTP_HOSTNAME2                  NULL
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME3
-#define NTP_HOSTNAME3                   NETUTILS_NTP_HOSTNAME3
+#define NTP_HOSTNAME3                  NETUTILS_NTP_HOSTNAME3
 #else
-#define NTP_HOSTNAME3                   NULL
+#define NTP_HOSTNAME3                  NULL
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
