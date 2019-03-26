@@ -69,6 +69,7 @@
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
 
 #define HOST_NAME_LEN                  16
+#define RECV_TIME_DELAY                10
 
 // Structure that defines the 48 byte NTP packet protocol.
 typedef struct {
@@ -203,6 +204,8 @@ time_t ntp_get_time(const char *host_name)
         {
             break;
         }
+        
+        rt_thread_mdelay(RECV_TIME_DELAY);
     }
 
     if(rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
