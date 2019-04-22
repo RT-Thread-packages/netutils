@@ -26,6 +26,10 @@
 #include <dfs_posix.h>
 #include <lwip/apps/tftp_server.h>
 
+#if defined(RT_USING_LWIP) && (RT_LWIP_TCPTHREAD_STACKSIZE < 1408)
+#error The lwIP tcpip thread stack size(RT_LWIP_TCPTHREAD_STACKSIZE) must more than 1408
+#endif
+
 static struct tftp_context ctx;
 
 static void* tftp_open(const char* fname, const char* mode, u8_t write)
