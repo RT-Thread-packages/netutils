@@ -99,7 +99,7 @@ typedef struct {
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static int sendto_ntp_server(int *sockfd, const char *host_name, struct sockaddr_in *serv_addr)
+static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_in *serv_addr)
 {
     struct hostent *server;
     socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -125,7 +125,7 @@ static int sendto_ntp_server(int *sockfd, const char *host_name, struct sockaddr
         /* Copy the server's IP address to the server address structure. */
         memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
 
-        return sendto(*sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
+        return sendto(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
     }
 }
 
@@ -174,7 +174,7 @@ time_t ntp_get_time(const char *host_name)
     if (host_name)
     {
         /* access the incoming host_name server */
-        if (sendto_ntp_server(&sockfd, host_name, serv_addr) >= 0)
+        if (sendto_ntp_server(sockfd, host_name, serv_addr) >= 0)
         {
             server_num = 1;
         }
@@ -187,7 +187,7 @@ time_t ntp_get_time(const char *host_name)
             if (host_name_buf[i] == NULL || strlen(host_name_buf[i]) == 0)
                 continue;
 
-            if (sendto_ntp_server(&sockfd, host_name_buf[i], &serv_addr[server_num]) >= 0)
+            if (sendto_ntp_server(sockfd, host_name_buf[i], &serv_addr[server_num]) >= 0)
             {
                 server_num ++;
             }
@@ -238,7 +238,7 @@ __exit:
     }
     else
     {
-        LOG_E("Receive the socket from server timeout.");
+        LOG_E("Receive the socket from server timeout (%dS).", NTP_GET_TIMEOUT);
     }
 
     closesocket(sockfd);
