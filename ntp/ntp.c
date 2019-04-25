@@ -28,19 +28,19 @@
 #include <sys/types.h>
 #include <rtdevice.h>
 
-#if defined(RT_USING_SAL)
+#if defined(RT_USING_SAL) && defined(RT_USING_NETDEV)
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #elif defined(RT_USING_LWIP)
+#include <lwip/inet.h>
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
 #endif /* RT_USING_SAL */
 
-#if defined(RT_USING_NETDEV) 
-#include <arpa/inet.h>
+#if defined(RT_USING_NETDEV)
 #include <netdev.h>
 #elif defined(RT_USING_LWIP)
-#include <lwip/inet.h>
 #include <lwip/netif.h>
 #endif /* RT_USING_NETDEV */
 
