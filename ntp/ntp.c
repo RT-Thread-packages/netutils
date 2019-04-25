@@ -26,10 +26,23 @@
 #include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
 #include <rtdevice.h>
+
+#if defined(RT_USING_SAL)
+#include <sys/socket.h>
+#include <netdb.h>
+#elif defined(RT_USING_LWIP)
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
+#endif /* RT_USING_SAL */
+
+#if defined(RT_USING_NETDEV) 
+#include <arpa/inet.h>
+#include <netdev.h>
+#elif defined(RT_USING_LWIP)
+#include <lwip/inet.h>
+#include <lwip/netif.h>
+#endif /* RT_USING_NETDEV */
 
 #define DBG_SECTION_NAME               "ntp"
 #define DBG_LEVEL                      DBG_INFO
@@ -129,7 +142,6 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
     }
 }
 
-
 /**
  * Get the UTC time from NTP server
  *
@@ -162,6 +174,66 @@ time_t ntp_get_time(const char *host_name)
     /* Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
        Represents 27 in base 10 or 00011011 in base 2. */
     *((char *) &packet + 0) = 0x1b;
+
+#if defined(RT_USING_NETDEV) || defined(RT_USING_LWIP)
+    {   
+        #define NTP_INTERNET_VERSION   0x00
+        #define NTP_INTERNET_BUFF_LEN  14
+        #define NTP_INTERNET_MONTH_LEN 4
+        #define NTP_INTERNET_DATE_LEN  16
+
+        const char month[][NTP_INTERNET_MONTH_LEN] = 
+            {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+        char date[NTP_INTERNET_DATE_LEN] = {0};
+        char send_data[NTP_INTERNET_BUFF_LEN] = {0};
+        int index, moth_num = 0;
+        uint16_t check = 0;
+
+        /* get build moth value*/
+        rt_memset(date, 0x00, NTP_INTERNET_DATE_LEN);
+        rt_snprintf(date, NTP_INTERNET_DATE_LEN, "%s", __DATE__);
+
+        for (index = 0; index < sizeof(month) / NTP_INTERNET_MONTH_LEN; index++)
+        {
+            if (rt_memcmp(date, month[index], NTP_INTERNET_MONTH_LEN - 1) == 0)
+            {
+                moth_num = index + 1;
+                break;
+            }
+        }
+
+        rt_memset(send_data, 0x00, NTP_INTERNET_BUFF_LEN);
+        send_data[0] = NTP_INTERNET_VERSION;
+
+        /* get hardware address */
+        {
+#if defined(RT_USING_LWIP) && !defined(RT_USING_NETDEV)
+            #define netdev netif
+            #define netdev_default netif_default
+#endif
+            extern struct netdev *netdev_default;
+            struct netdev *netdev = netdev_default;
+
+            for (index = 0; index < netdev->hwaddr_len; index++)
+            {
+                send_data[index + 1] = netdev->hwaddr[index] + moth_num;
+            }
+        }
+
+        send_data[9] = RT_VERSION;
+        send_data[10] = RT_SUBVERSION;
+        send_data[11] = RT_REVISION;
+
+        /* get the check value */
+        for (index = 0; index < NTP_INTERNET_BUFF_LEN - sizeof(check); index++)
+        {
+            check += (uint8_t)send_data[index];
+        }
+        rt_memcpy(send_data + NTP_INTERNET_BUFF_LEN - sizeof(check), &check, sizeof(check));
+        rt_memcpy(((char *)&packet + 4), send_data, NTP_INTERNET_BUFF_LEN);
+    }
+#endif /* RT_USING_NETDEV || RT_USING_LWIP */
+    
 
     /* Create a UDP socket. */
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
