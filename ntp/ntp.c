@@ -36,6 +36,11 @@
 #include <lwip/inet.h>
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
+extern struct hostent *gethostbyname(const char *name);
+extern int recvfrom(int s, void *mem, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen);
+extern int sendto(int s, const void *dataptr, size_t size, int flags, const struct sockaddr *to, socklen_t tolen);
+extern int socket(int domain, int type, int protocol);
+extern int closesocket(int s);
 #endif /* RT_USING_SAL */
 
 #if defined(RT_USING_NETDEV)
@@ -186,7 +191,7 @@ time_t ntp_get_time(const char *host_name)
             {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
         char date[NTP_INTERNET_DATE_LEN] = {0};
         char send_data[NTP_INTERNET_BUFF_LEN] = {0};
-        int index, moth_num = 0;
+        uint8_t index, moth_num = 0;
         uint16_t check = 0;
 
         /* get build moth value*/
@@ -212,11 +217,11 @@ time_t ntp_get_time(const char *host_name)
             #define netdev_default netif_default
 #endif
             extern struct netdev *netdev_default;
-            struct netdev *netdev = netdev_default;
+            struct netdev *dev = netdev_default;
 
-            for (index = 0; index < netdev->hwaddr_len; index++)
+            for (index = 0; index < dev->hwaddr_len; index++)
             {
-                send_data[index + 1] = netdev->hwaddr[index] + moth_num;
+                send_data[index + 1] = dev->hwaddr[index] + moth_num;
             }
         }
 
