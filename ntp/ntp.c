@@ -190,12 +190,11 @@ time_t ntp_get_time(const char *host_name)
         const char month[][NTP_INTERNET_MONTH_LEN] = 
             {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
         char date[NTP_INTERNET_DATE_LEN] = {0};
-        char send_data[NTP_INTERNET_BUFF_LEN] = {0};
+        uint8_t send_data[NTP_INTERNET_BUFF_LEN] = {0};
         uint8_t index, moth_num = 0;
         uint16_t check = 0;
 
         /* get build moth value*/
-        rt_memset(date, 0x00, NTP_INTERNET_DATE_LEN);
         rt_snprintf(date, NTP_INTERNET_DATE_LEN, "%s", __DATE__);
 
         for (index = 0; index < sizeof(month) / NTP_INTERNET_MONTH_LEN; index++)
@@ -207,7 +206,6 @@ time_t ntp_get_time(const char *host_name)
             }
         }
 
-        rt_memset(send_data, 0x00, NTP_INTERNET_BUFF_LEN);
         send_data[0] = NTP_INTERNET_VERSION;
 
         /* get hardware address */
@@ -234,7 +232,9 @@ time_t ntp_get_time(const char *host_name)
         {
             check += (uint8_t)send_data[index];
         }
-        rt_memcpy(send_data + NTP_INTERNET_BUFF_LEN - sizeof(check), &check, sizeof(check));
+        send_data[NTP_INTERNET_BUFF_LEN - 2] = check >> 8;
+        send_data[NTP_INTERNET_BUFF_LEN - 1] = check & 0xFF;
+
         rt_memcpy(((char *)&packet + 4), send_data, NTP_INTERNET_BUFF_LEN);
     }
 #endif /* RT_USING_NETDEV || RT_USING_LWIP */
