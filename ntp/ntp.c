@@ -182,10 +182,13 @@ time_t ntp_get_time(const char *host_name)
 
 #if defined(RT_USING_NETDEV) || defined(RT_USING_LWIP)
     {   
-        #define NTP_INTERNET_VERSION   0x00
-        #define NTP_INTERNET_BUFF_LEN  14
+        #define NTP_INTERNET           0x02
+        #define NTP_INTERNET_BUFF_LEN  18
         #define NTP_INTERNET_MONTH_LEN 4
         #define NTP_INTERNET_DATE_LEN  16
+        #ifndef SW_VER_NUM
+        #define SW_VER_NUM             0x00000000
+        #endif
 
         const char month[][NTP_INTERNET_MONTH_LEN] = 
             {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
@@ -206,7 +209,7 @@ time_t ntp_get_time(const char *host_name)
             }
         }
 
-        send_data[0] = NTP_INTERNET_VERSION;
+        send_data[0] = NTP_INTERNET;
 
         /* get hardware address */
         {
@@ -226,6 +229,10 @@ time_t ntp_get_time(const char *host_name)
         send_data[9] = RT_VERSION;
         send_data[10] = RT_SUBVERSION;
         send_data[11] = RT_REVISION;
+        send_data[12] = (uint8_t)(SW_VER_NUM >> 24);
+        send_data[13] = (uint8_t)(SW_VER_NUM >> 16);
+        send_data[14] = (uint8_t)(SW_VER_NUM >> 8);
+        send_data[15] = (uint8_t)(SW_VER_NUM & 0xFF);
 
         /* get the check value */
         for (index = 0; index < NTP_INTERNET_BUFF_LEN - sizeof(check); index++)
