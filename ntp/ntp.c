@@ -123,11 +123,11 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
     socklen_t addr_len = sizeof(struct sockaddr_in);
     /* NTP UDP port number. */
     int portno = 123;
-    
+
     server = gethostbyname(host_name);
     if (server == NULL)
     {
-        LOG_W("No such host(%s)", host_name);
+        LOG_D("No such host(%s)", host_name);
         return -RT_ERROR;
     }
     else
