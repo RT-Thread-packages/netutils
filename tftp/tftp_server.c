@@ -1,417 +1,588 @@
-/****************************************************************//**
+/*
+ * Copyright (c) 2006-2019, RT-Thread Development Team
  *
- * @file tftp_server.c
+ * SPDX-License-Identifier: Apache-2.0
  *
- * @author   Logan Gunthorpe <logang@deltatee.com>
- *           Dirk Ziegelmeier <dziegel@gmx.de>
- *
- * @brief    Trivial File Transfer Protocol (RFC 1350)
- *
- * Copyright (c) Deltatee Enterprises Ltd. 2013
- * All rights reserved.
- *
- ********************************************************************/
-
-/* 
- * Redistribution and use in source and binary forms, with or without
- * modification,are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
- * TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Author: Logan Gunthorpe <logang@deltatee.com>
- *         Dirk Ziegelmeier <dziegel@gmx.de>
- *
+ * Change Logs:
+ * Date           Author       Notes
+ * 2019-02-26     tyx          first implementation
  */
 
-/**
- * @defgroup tftp TFTP server
- * @ingroup apps
- *
- * This is simple TFTP server for the lwIP raw API.
- */
-
-#include "lwip/apps/tftp_server.h"
-
-#if LWIP_UDP
-
-#include "lwip/udp.h"
-#include "lwip/timeouts.h"
-#include "lwip/debug.h"
-
-#define TFTP_MAX_PAYLOAD_SIZE 512
-#define TFTP_HEADER_LENGTH    4
-
-#define TFTP_RRQ   1
-#define TFTP_WRQ   2
-#define TFTP_DATA  3
-#define TFTP_ACK   4
-#define TFTP_ERROR 5
-
-enum tftp_error {
-  TFTP_ERROR_FILE_NOT_FOUND    = 1,
-  TFTP_ERROR_ACCESS_VIOLATION  = 2,
-  TFTP_ERROR_DISK_FULL         = 3,
-  TFTP_ERROR_ILLEGAL_OPERATION = 4,
-  TFTP_ERROR_UNKNOWN_TRFR_ID   = 5,
-  TFTP_ERROR_FILE_EXISTS       = 6,
-  TFTP_ERROR_NO_SUCH_USER      = 7
-};
-
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include "tftp_xfer.h"
+#include "tftp.h"
 
-struct tftp_state {
-  const struct tftp_context *ctx;
-  void *handle;
-  struct pbuf *last_data;
-  struct udp_pcb *upcb;
-  ip_addr_t addr;
-  u16_t port;
-  int timer;
-  int last_pkt;
-  u16_t blknum;
-  u8_t retries;
-  u8_t mode_write;
+#define TFTP_SERVER_EVENT_CONNECT   (0x1 << 0)
+#define TFTP_SERVER_EVENT_DATA      (0x1 << 1)
+#define TFTP_SERVER_EVENT_TIMEOUT   (0x1 << 2)
+
+#define TFTP_SERVER_FILE_NAME_MAX   (512)
+
+#define TFTP_SERVER_REQ_READ    (0x0)
+#define TFTP_SERVER_REQ_WRITE   (0x1)
+
+extern void *tftp_file_open(const char *fname, const char *mode, int is_write);
+extern int tftp_file_write(void *handle, int pos, void *buff, int len);
+extern int tftp_file_read(void *handle, int pos, void *buff, int len);
+extern void tftp_file_close(void *handle);
+
+struct tftp_client_xfer
+{
+    struct tftp_xfer *xfer;
+    int16_t w_r;
+    int16_t retry;
+    int pos;
+    int last_read;
+    void *fd;
 };
 
-static struct tftp_state tftp_state;
-
-static void tftp_tmr(void* arg);
-
-static void
-close_handle(void)
+struct tftp_server_private
 {
-  tftp_state.port = 0;
-  ip_addr_set_any(0, &tftp_state.addr);
+    struct tftp_xfer *server_xfer;
+    struct tftp_client_xfer *client_table;
+    int table_num;
+    fd_set fdr;
+    struct timeval timeout;
+};
 
-  if(tftp_state.last_data != NULL) {
-    pbuf_free(tftp_state.last_data);
-    tftp_state.last_data = NULL;
-  }
-
-  sys_untimeout(tftp_tmr, NULL);
-  
-  if (tftp_state.handle) {
-    tftp_state.ctx->close(tftp_state.handle);
-    tftp_state.handle = NULL;
-    LWIP_DEBUGF(TFTP_DEBUG | LWIP_DBG_STATE, ("tftp: closing\n"));
-  }
-}
-
-static void
-send_error(const ip_addr_t *addr, u16_t port, enum tftp_error code, const char *str)
+static int tftp_server_select(struct tftp_server *server)
 {
-  int str_length = strlen(str);
-  struct pbuf* p;
-  u16_t* payload;
-  
-  p = pbuf_alloc(PBUF_TRANSPORT, (u16_t)(TFTP_HEADER_LENGTH + str_length + 1), PBUF_RAM);
-  if(p == NULL) {
-    return;
-  }
+    struct tftp_server_private *_private;
+    int max_sock, i;
+    int ret;
 
-  payload = (u16_t*) p->payload;
-  payload[0] = PP_HTONS(TFTP_ERROR);
-  payload[1] = lwip_htons(code);
-  MEMCPY(&payload[2], str, str_length + 1);
-
-  udp_sendto(tftp_state.upcb, p, addr, port);
-  pbuf_free(p);
-}
-
-static void
-send_ack(u16_t blknum)
-{
-  struct pbuf* p;
-  u16_t* payload;
-  
-  p = pbuf_alloc(PBUF_TRANSPORT, TFTP_HEADER_LENGTH, PBUF_RAM);
-  if(p == NULL) {
-    return;
-  }
-  payload = (u16_t*) p->payload;
-  
-  payload[0] = PP_HTONS(TFTP_ACK);
-  payload[1] = lwip_htons(blknum);
-  udp_sendto(tftp_state.upcb, p, &tftp_state.addr, tftp_state.port);
-  pbuf_free(p);
-}
-
-static void
-resend_data(void)
-{
-  struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, tftp_state.last_data->len, PBUF_RAM);
-  if(p == NULL) {
-    return;
-  }
-
-  if(pbuf_copy(p, tftp_state.last_data) != ERR_OK) {
-    pbuf_free(p);
-    return;
-  }
-    
-  udp_sendto(tftp_state.upcb, p, &tftp_state.addr, tftp_state.port);
-  pbuf_free(p);
-}
-
-static void
-send_data(void)
-{
-  u16_t *payload;
-  int ret;
-
-  if(tftp_state.last_data != NULL) {
-    pbuf_free(tftp_state.last_data);
-  }
-  
-  tftp_state.last_data = pbuf_alloc(PBUF_TRANSPORT, TFTP_HEADER_LENGTH + TFTP_MAX_PAYLOAD_SIZE, PBUF_RAM);
-  if(tftp_state.last_data == NULL) {
-    return;
-  }
-
-  payload = (u16_t *) tftp_state.last_data->payload;
-  payload[0] = PP_HTONS(TFTP_DATA);
-  payload[1] = lwip_htons(tftp_state.blknum);
-
-  ret = tftp_state.ctx->read(tftp_state.handle, &payload[2], TFTP_MAX_PAYLOAD_SIZE);
-  if (ret < 0) {
-    send_error(&tftp_state.addr, tftp_state.port, TFTP_ERROR_ACCESS_VIOLATION, "Error occured while reading the file.");
-    close_handle();
-    return;
-  }
-
-  pbuf_realloc(tftp_state.last_data, (u16_t)(TFTP_HEADER_LENGTH + ret));
-  resend_data();
-}
-
-static void
-recv(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
-{
-  u16_t *sbuf = (u16_t *) p->payload;
-  int opcode;
-
-  LWIP_UNUSED_ARG(arg);
-  LWIP_UNUSED_ARG(upcb);
-  
-  if (((tftp_state.port != 0) && (port != tftp_state.port)) ||
-      (!ip_addr_isany_val(tftp_state.addr) && !ip_addr_cmp(&tftp_state.addr, addr))) {
-    send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Only one connection at a time is supported");
-    pbuf_free(p);
-    return;
-  }
-
-  opcode = sbuf[0];
-
-  tftp_state.last_pkt = tftp_state.timer;
-  tftp_state.retries = 0;
-
-  switch (opcode) {
-    case PP_HTONS(TFTP_RRQ): /* fall through */
-    case PP_HTONS(TFTP_WRQ):
+    _private = server->_private;
+    FD_ZERO(&_private->fdr);
+    /* Select server */
+    FD_SET(_private->server_xfer->sock, &_private->fdr);
+    max_sock = _private->server_xfer->sock;
+    /* Select all client connections */
+    for (i = 0; i < _private->table_num; i++)
     {
-      const char tftp_null = 0;
-      char filename[TFTP_MAX_FILENAME_LEN + 1] = { 0 };
-      char mode[TFTP_MAX_MODE_LEN] = { 0 };
-      u16_t filename_end_offset;
-      u16_t mode_end_offset;
-
-      if(tftp_state.handle != NULL) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Only one connection at a time is supported");
-        break;
-      }
-      
-      sys_timeout(TFTP_TIMER_MSECS, tftp_tmr, NULL);
-
-      /* find \0 in pbuf -> end of filename string */
-      filename_end_offset = pbuf_memfind(p, &tftp_null, sizeof(tftp_null), 2);
-      if((u16_t)(filename_end_offset-2) > sizeof(filename)) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Filename too long/not NULL terminated");
-        break;
-      }
-      pbuf_copy_partial(p, filename, filename_end_offset-2, 2);
-
-      /* find \0 in pbuf -> end of mode string */
-      mode_end_offset = pbuf_memfind(p, &tftp_null, sizeof(tftp_null), filename_end_offset+1);
-      if((u16_t)(mode_end_offset-filename_end_offset) > sizeof(mode)) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Mode too long/not NULL terminated");
-        break;
-      }
-      pbuf_copy_partial(p, mode, mode_end_offset-filename_end_offset, filename_end_offset+1);
- 
-      tftp_state.handle = tftp_state.ctx->open(filename, mode, opcode == PP_HTONS(TFTP_WRQ));
-      tftp_state.blknum = 1;
-
-      if (!tftp_state.handle) {
-        send_error(addr, port, TFTP_ERROR_FILE_NOT_FOUND, "Unable to open requested file.");
-        break;
-      }
-
-      LWIP_DEBUGF(TFTP_DEBUG | LWIP_DBG_STATE, ("tftp: %s request from ", (opcode == PP_HTONS(TFTP_WRQ)) ? "write" : "read"));
-      ip_addr_debug_print(TFTP_DEBUG | LWIP_DBG_STATE, addr);
-      LWIP_DEBUGF(TFTP_DEBUG | LWIP_DBG_STATE, (" for '%s' mode '%s'\n", filename, mode));
-
-      ip_addr_copy(tftp_state.addr, *addr);
-      tftp_state.port = port;
-
-      if (opcode == PP_HTONS(TFTP_WRQ)) {
-        tftp_state.mode_write = 1;
-        send_ack(0);
-      } else {
-        tftp_state.mode_write = 0;
-        send_data();
-      }
-
-      break;
+        if (_private->client_table[i].xfer != NULL)
+        {
+            FD_SET(_private->client_table[i].xfer->sock, &_private->fdr);
+            if (max_sock < _private->client_table[i].xfer->sock)
+            {
+                max_sock = _private->client_table[i].xfer->sock;
+            }
+        }
     }
-    
-    case PP_HTONS(TFTP_DATA):
+    /* Setting timeout time */
+    _private->timeout.tv_sec = 5;
+    _private->timeout.tv_usec = 0;
+    ret = select(max_sock + 1, &_private->fdr, NULL, NULL, (void *)&_private->timeout);
+    if (ret == 0)
     {
-      int ret;
-      u16_t blknum;
-      
-      if (tftp_state.handle == NULL) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "No connection");
-        break;
-      }
-
-      if (tftp_state.mode_write != 1) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Not a write connection");
-        break;
-      }
-
-      blknum = lwip_ntohs(sbuf[1]);
-      pbuf_header(p, -TFTP_HEADER_LENGTH);
-
-      ret = tftp_state.ctx->write(tftp_state.handle, p);
-      if (ret < 0) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "error writing file");
-        close_handle();
-      } else {
-        send_ack(blknum);
-      }
-
-      if (p->tot_len < TFTP_MAX_PAYLOAD_SIZE) {
-        close_handle();
-      }
-      break;
+        return -TFTP_ETIMEOUT;
     }
-
-    case PP_HTONS(TFTP_ACK):
+    else if (ret < 0)
     {
-      u16_t blknum;
-      int lastpkt;
-
-      if (tftp_state.handle == NULL) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "No connection");
-        break;
-      }
-
-      if (tftp_state.mode_write != 0) {
-        send_error(addr, port, TFTP_ERROR_ACCESS_VIOLATION, "Not a read connection");
-        break;
-      }
-
-      blknum = lwip_ntohs(sbuf[1]);
-      if (blknum != tftp_state.blknum) {
-        send_error(addr, port, TFTP_ERROR_UNKNOWN_TRFR_ID, "Wrong block number");
-        break;
-      }
-
-      lastpkt = 0;
-
-      if (tftp_state.last_data != NULL) {
-        lastpkt = tftp_state.last_data->tot_len != (TFTP_MAX_PAYLOAD_SIZE + TFTP_HEADER_LENGTH);
-      }
-
-      if (!lastpkt) {
-        tftp_state.blknum++;
-        send_data();
-      } else {
-        close_handle();
-      }
-
-      break;
+        return -TFTP_ESYS;
     }
-    
-    default:
-      send_error(addr, port, TFTP_ERROR_ILLEGAL_OPERATION, "Unknown operation");
-      break;
-  }
 
-  pbuf_free(p);
-}
-
-static void
-tftp_tmr(void* arg)
-{
-  LWIP_UNUSED_ARG(arg);
-  
-  tftp_state.timer++;
-
-  if (tftp_state.handle == NULL) {
-    return;
-  }
-
-  sys_timeout(TFTP_TIMER_MSECS, tftp_tmr, NULL);
-
-  if ((tftp_state.timer - tftp_state.last_pkt) > (TFTP_TIMEOUT_MSECS / TFTP_TIMER_MSECS)) {
-    if ((tftp_state.last_data != NULL) && (tftp_state.retries < TFTP_MAX_RETRIES)) {
-      LWIP_DEBUGF(TFTP_DEBUG | LWIP_DBG_STATE, ("tftp: timeout, retrying\n"));
-      resend_data();
-      tftp_state.retries++;
-    } else {
-      LWIP_DEBUGF(TFTP_DEBUG | LWIP_DBG_STATE, ("tftp: timeout\n"));
-      close_handle();
-    }
-  }
-}
-
-/** @ingroup tftp
- * Initialize TFTP server.
- * @param ctx TFTP callback struct
- */
-err_t 
-tftp_init(const struct tftp_context *ctx)
-{
-  err_t ret;
-
-  struct udp_pcb *pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
-  if (pcb == NULL) {
-    return ERR_MEM;
-  }
-
-  ret = udp_bind(pcb, IP_ANY_TYPE, TFTP_PORT);
-  if (ret != ERR_OK) {
-    udp_remove(pcb);
     return ret;
-  }
-
-  tftp_state.handle    = NULL;
-  tftp_state.port      = 0;
-  tftp_state.ctx       = ctx;
-  tftp_state.timer     = 0;
-  tftp_state.last_data = NULL;
-  tftp_state.upcb      = pcb;
-
-  udp_recv(pcb, recv, NULL);
-
-  return ERR_OK;
 }
 
-#endif /* LWIP_UDP */
+static struct tftp_client_xfer *tftp_client_xfer_get(struct tftp_server *server, int index)
+{
+    struct tftp_server_private *_private;
+
+    _private = server->_private;
+    if (_private->table_num > index)
+    {
+        return &_private->client_table[index];
+    }
+    return NULL;
+}
+
+static struct tftp_client_xfer *tftp_client_xfer_add(struct tftp_server *server, struct tftp_xfer *xfer)
+{
+    struct tftp_server_private *_private;
+    int i;
+
+    _private = server->_private;
+    /* View space and add */
+    for (i = 0; i < _private->table_num; i++)
+    {
+        if (_private->client_table[i].xfer == NULL)
+        {
+            memset(&_private->client_table[i], 0, sizeof(struct tftp_client_xfer));
+            _private->client_table[i].xfer = xfer;
+            return &_private->client_table[i];
+        }
+    }
+    return NULL;
+}
+
+static void tftp_client_xfer_delete(struct tftp_server *server, struct tftp_xfer *xfer)
+{
+    struct tftp_server_private *_private;
+    int i;
+
+    _private = server->_private;
+    /* Find a clinet xfer and remove */
+    for (i = 0; i < _private->table_num; i++)
+    {
+        if (_private->client_table[i].xfer == xfer)
+        {
+            _private->client_table[i].xfer = NULL;
+            break;
+        }
+    }
+}
+
+static void tftp_client_xfer_destroy(struct tftp_server *server, struct tftp_client_xfer *client)
+{
+    /* Close client connection */
+    tftp_xfer_destroy(client->xfer);
+    /* close file */
+    tftp_file_close(client->fd);
+    /* Delete client */
+    tftp_client_xfer_delete(server, client->xfer);
+}
+
+static void tftp_server_send_file(struct tftp_server *server, struct tftp_client_xfer *client, struct tftp_packet *packet, bool resend)
+{
+    int r_size, s_size;
+    int retry = TFTP_MAX_RETRY;
+
+    if (resend == false)
+    {
+        client->pos += client->last_read;
+    }
+    /* read file */
+    r_size = tftp_file_read(client->fd, client->pos, &packet->data, client->xfer->blksize);
+    if (r_size < 0)
+    {
+        r_size = 0;
+    }
+    while (1)
+    {
+        /* Send data to client */
+        s_size = tftp_write_data(client->xfer, packet, r_size + 4);
+        if (r_size == (s_size - 4))
+        {
+            break;
+        }
+        /* Failed to send data. retry */
+        if (retry-- == 0)
+        {
+            break;
+        }
+    }
+    /* Maximum number of retries */
+    if (retry == 0)
+    {
+        /* Destroy client connection */
+        tftp_client_xfer_destroy(server, client);
+    }
+    else
+    {
+        client->last_read = r_size;
+    }
+}
+
+static void tftp_server_send_ack(struct tftp_server *server, struct tftp_client_xfer *client)
+{
+    int retry = TFTP_MAX_RETRY;
+    bool res;
+
+    while (1)
+    {
+        /* send ack */
+        res = tftp_resp_ack(client->xfer);
+        if (res == TFTP_OK)
+        {
+            break;
+        }
+        /* send failed. retry */
+        if (retry-- == 0)
+        {
+            break;
+        }
+    }
+    if (retry == 0)
+    {
+        /* Maximum number of retries */
+        tftp_client_xfer_destroy(server, client);
+    }
+}
+
+static void tftp_server_transf_handle(struct tftp_server *server, struct tftp_client_xfer *client, int event, struct tftp_packet *packet)
+{
+    switch (event)
+    {
+    case TFTP_SERVER_EVENT_CONNECT:
+        if (client->w_r == TFTP_SERVER_REQ_READ)
+        {
+            /* Read the file request and return the file data */
+            tftp_server_send_file(server, client, packet, false);
+        }
+        else
+        {
+            /* Write file request, return ACK */
+            tftp_server_send_ack(server, client);
+        }
+        break;
+    case TFTP_SERVER_EVENT_DATA:
+        /* Receive data from client */
+        if (client->w_r == TFTP_SERVER_REQ_READ)
+        {
+            /* If reques is read. Receive ACK */
+            if (tftp_wait_ack(client->xfer) == TFTP_OK)
+            {
+                /* Receive ACK success. If it's the last package of data, close client */
+                if (client->last_read < client->xfer->blksize)
+                {
+                    tftp_client_xfer_destroy(server, client);
+                    break;
+                }
+                /* Receive ACK success. Continue sending data */
+                tftp_server_send_file(server, client, packet, false);
+                client->retry = TFTP_MAX_RETRY;
+            }
+            else
+            {
+                /* Receive ACK failed. close client */
+                tftp_transfer_err(client->xfer, 0, "err ack!");
+                tftp_client_xfer_destroy(server, client);
+            }
+        }
+        else
+        {
+            /* Write File Request handle */
+            int recv_size, w_size;
+            /* Receiving File Data from Client */
+            recv_size = tftp_read_data(client->xfer, packet,
+                                       (int)((uint8_t *)&packet->data - (uint8_t *)packet) + client->xfer->blksize);
+            if (recv_size < 0)
+            {
+                /* Receiving failed. */
+                tftp_printf("server read data err! disconnect client\n");
+                tftp_client_xfer_destroy(server, client);
+            }
+            else
+            {
+                /* write file */
+                w_size = tftp_file_write(client->fd, client->pos, &packet->data, recv_size);
+                if (w_size != recv_size)
+                {
+                    /* Write file error, close connection */
+                    tftp_printf("server write file err! disconnect client\n");
+                    tftp_transfer_err(client->xfer, 0, "write file err!");
+                    tftp_client_xfer_destroy(server, client);
+                    break;
+                }
+                /* Reply ack */
+                tftp_server_send_ack(server, client);
+                client->pos += recv_size;
+                /* Receive the last packet of data. close client */
+                if (recv_size < client->xfer->blksize)
+                {
+                    tftp_client_xfer_destroy(server, client);
+                }
+            }
+        }
+        break;
+    case TFTP_SERVER_EVENT_TIMEOUT:
+        /* Timeout handle */
+        if (client->w_r == TFTP_SERVER_REQ_READ)
+        {
+            /* resend file */
+            if (client->retry > 0)
+            {
+                tftp_server_send_file(server, client, packet, true);
+                client->retry--;
+            }
+            else
+            {
+                /* Maximum number of retransmissions */
+                tftp_client_xfer_destroy(server, client);
+            }
+        }
+        else
+        {
+            if (client->retry > 0)
+            {
+                /* resend ack */
+                tftp_server_send_ack(server, client);
+                client->retry--;
+            }
+            else
+            {
+                tftp_client_xfer_destroy(server, client);
+            }
+        }
+        break;
+    default:
+        tftp_printf("warr!! unknown event:%d\n", event);
+        break;
+    }
+}
+
+static struct tftp_client_xfer *tftp_server_request_handle(struct tftp_server *server, struct tftp_packet *packet)
+{
+    struct tftp_xfer *xfer;
+    struct tftp_server_private *_private;
+    char *path, *full_path;
+    int name_len;
+    struct tftp_client_xfer *client_xfer;
+    void *fd = NULL;
+    char *mode;
+    char *blksize_str;
+    int blocksize;
+
+    _private = server->_private;
+    /* Receiving client requests */
+    memset(packet, 0, sizeof(struct tftp_packet));
+    xfer = tftp_recv_request(_private->server_xfer, packet);
+    if (xfer == NULL)
+    {
+        return NULL;
+    }
+    /* Can write ? */
+    if (ntohs(packet->cmd) == TFTP_CMD_WRQ && (!server->is_write))
+    {
+        tftp_printf("server read only!\n");
+        tftp_transfer_err(xfer, 0, "server read only!");
+        tftp_xfer_destroy(xfer);
+        return NULL;
+    }
+
+    /* Get file path */
+    path = packet->info.filename;
+    /* Get transfer mode */
+    mode = path + strlen(path) + 1;
+    tftp_xfer_mode_set(xfer, mode);
+    /* Get block size */
+    blksize_str = mode + strlen(mode) + 1;
+    if (strcmp(blksize_str, "blksize") == 0)
+    {
+        blocksize = atoi(blksize_str + strlen(blksize_str) + 1);
+        if (tftp_xfer_blksize_set(xfer, blocksize) != TFTP_OK)
+        {
+            tftp_printf("set block size err:%d\n", blocksize);
+            tftp_transfer_err(xfer, 0, "block size err!");
+            tftp_xfer_destroy(xfer);
+            return NULL;
+        }
+    }
+    /* Get full file path */
+    name_len = strlen(path) + strlen(server->root_name);
+    if (name_len >= TFTP_SERVER_FILE_NAME_MAX)
+    {
+        tftp_printf("file name is to long!!\n");
+        tftp_transfer_err(xfer, 0, "file name to long!");
+        tftp_xfer_destroy(xfer);
+        return NULL;
+    }
+    full_path = malloc(name_len);
+    if (full_path == NULL)
+    {
+        tftp_printf("mallo full path failed!\n");
+        tftp_transfer_err(xfer, 0, "server err!");
+        tftp_xfer_destroy(xfer);
+        return NULL;
+    }
+
+    strcpy(full_path, server->root_name);
+    if (path[0] != '/')
+    {
+        strcat(full_path, "/");
+    }
+    strcat(full_path, path);
+
+    /* open file */
+    if (ntohs(packet->cmd) == TFTP_CMD_RRQ)
+    {
+        fd = tftp_file_open(full_path, TFTP_XFER_OCTET, 0);
+    }
+    else if (ntohs(packet->cmd) == TFTP_CMD_WRQ)
+    {
+        fd = tftp_file_open(full_path, TFTP_XFER_OCTET, 1);
+    }
+    free(full_path);
+    if (fd == NULL)
+    {
+        tftp_printf("open file failed!\n");
+        tftp_transfer_err(xfer, 0, "file err");
+        tftp_xfer_destroy(xfer);
+        return NULL;
+    }
+    /* push client to queue */
+    client_xfer = tftp_client_xfer_add(server, xfer);
+    if (client_xfer == NULL)
+    {
+        tftp_printf("too many connections!!");
+        tftp_transfer_err(xfer, 0, "too many connections!");
+        tftp_xfer_destroy(xfer);
+        tftp_file_close(fd);
+    }
+    else
+    {
+        client_xfer->w_r = ntohs(packet->cmd) == TFTP_CMD_RRQ ? \
+            TFTP_SERVER_REQ_READ : TFTP_SERVER_REQ_WRITE;
+        client_xfer->retry = TFTP_MAX_RETRY;
+        client_xfer->fd = fd;
+        client_xfer->pos = 0;
+        client_xfer->last_read = 0;
+    }
+    return client_xfer;
+}
+
+void tftp_server_run(struct tftp_server *server)
+{
+    struct tftp_xfer *xfer;
+    struct tftp_packet *packet;
+    struct tftp_server_private *_private;
+    int res, i;
+    struct tftp_client_xfer *client_xfer;
+
+    if (server == NULL)
+    {
+        return;
+    }
+    _private = server->_private;
+    /* malloc transport packet */
+    packet = malloc(sizeof(struct tftp_packet));
+    if (packet == NULL)
+    {
+        return;
+    }
+    /* Create connect */
+    xfer = tftp_xfer_create("0.0.0.0", 69);
+    if (xfer == NULL)
+    {
+        free(packet);
+        return;
+    }
+    /* Set connection type to server */
+    if (tftp_xfer_type_set(xfer, TFTP_XFER_TYPE_SERVER) != TFTP_OK)
+    {
+        free(packet);
+        tftp_xfer_destroy(xfer);
+        return;
+    }
+    _private->server_xfer = xfer;
+    tftp_printf("tftp server start!\n");
+    /* run server */
+    while (!server->is_stop)
+    {
+        /* Waiting client data */
+        res = tftp_server_select(server);
+        if (res == -TFTP_ETIMEOUT)
+        {
+            /* Waiting for data timeout */
+            for (i = 0; i < _private->table_num; i++)
+            {
+                if (_private->client_table[i].xfer != NULL)
+                {
+                    client_xfer = tftp_client_xfer_get(server, i);
+                    tftp_server_transf_handle(server, client_xfer, TFTP_SERVER_EVENT_TIMEOUT, packet);
+                }
+            }
+            continue;
+        }
+        else if (res < 0)
+        {
+            break;
+        }
+        else
+        {
+            /* Connection request handle */
+            if (FD_ISSET(_private->server_xfer->sock, &_private->fdr))
+            {
+                client_xfer = tftp_server_request_handle(server, packet);
+                if (client_xfer != NULL)
+                {
+                    tftp_server_transf_handle(server, client_xfer, TFTP_SERVER_EVENT_CONNECT, packet);
+                }
+            }
+            /* Client data handle */
+            for (i = 0; i < _private->table_num; i++)
+            {
+                if (_private->client_table[i].xfer != NULL &&
+                    FD_ISSET(_private->client_table[i].xfer->sock, &_private->fdr))
+                {
+                    client_xfer = tftp_client_xfer_get(server, i);
+                    tftp_server_transf_handle(server, client_xfer, TFTP_SERVER_EVENT_DATA, packet);
+                }
+            }
+        }
+    }
+    /* exit. destroy all client */
+    for (i = 0; i < _private->table_num; i++)
+    {
+        if (_private->client_table[i].xfer != NULL)
+        {
+            client_xfer = tftp_client_xfer_get(server, i);
+            tftp_client_xfer_destroy(server, client_xfer);
+        }
+    }
+    /* free server */
+    tftp_xfer_destroy(_private->server_xfer);
+    free(_private->client_table);
+    free(server->root_name);
+    free(server);
+    free(packet);
+    tftp_printf("tftp server stop!\n");
+}
+
+struct tftp_server *tftp_server_create(const char *root_name, int port)
+{
+    struct tftp_server_private *_private;
+    struct tftp_server *server;
+    int mem_len;
+
+    /* new server object */
+    mem_len = sizeof(struct tftp_server_private) + sizeof(struct tftp_server);
+    server = malloc(mem_len);
+    if (server == NULL)
+    {
+        return NULL;
+    }
+    /* init server object */
+    memset(server, 0, mem_len);
+    server->root_name = strdup(root_name);
+    if (server->root_name == NULL)
+    {
+        free(server);
+        return NULL;
+    }
+    _private = (struct tftp_server_private *)&server[1];
+    server->_private = _private;
+    mem_len = sizeof(struct tftp_client_xfer) * TFTP_SERVER_CONNECT_MAX;
+    /* malloc client queue */
+    _private->client_table = malloc(mem_len);
+    if (_private->client_table == NULL)
+    {
+        free(server);
+        return NULL;
+    }
+    memset(_private->client_table, 0, mem_len);
+    _private->table_num = TFTP_SERVER_CONNECT_MAX;
+    return server;
+}
+
+void tftp_server_write_set(struct tftp_server *server, int is_write)
+{
+    if (server != NULL)
+    {
+        server->is_write = is_write;
+    }
+}
+
+void tftp_server_destroy(struct tftp_server *server)
+{
+    if (server != NULL)
+    {
+        server->is_stop = 1;
+    }
+}
