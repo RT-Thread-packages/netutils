@@ -28,7 +28,7 @@
 #include <sys/types.h>
 #include <rtdevice.h>
 
-#if defined(RT_USING_SAL) && defined(RT_USING_NETDEV)
+#if defined(RT_USING_SAL)
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
