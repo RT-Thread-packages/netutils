@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2019-02-26     tyx          first implementation
+ * 2019-11-18     tjrong       fix a bug in tftp_server_request_handle.
  */
 
 #include <stdio.h>
@@ -375,7 +376,7 @@ static struct tftp_client_xfer *tftp_server_request_handle(struct tftp_server *s
         }
     }
     /* Get full file path */
-    name_len = strlen(path) + strlen(server->root_name);
+    name_len = strlen(path) + strlen(server->root_name) + 1;
     if (name_len >= TFTP_SERVER_FILE_NAME_MAX)
     {
         tftp_printf("file name is to long!!\n");
