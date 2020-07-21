@@ -20,11 +20,17 @@
  * Change Logs:
  * Date           Author       Notes
  * 2018-02-10     armink       the first version
+ * 2020-07-21     Chenxuan     C++ support
  */
-#ifndef _NTP_H_
-#define _NTP_H_
+
+#ifndef __NTP_H__
+#define __NTP_H__
 
 #include <time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Get the UTC time from NTP server
@@ -58,4 +64,8 @@ time_t ntp_get_local_time(const char *host_name);
  */
 time_t ntp_sync_to_rtc(const char *host_name);
 
-#endif /* _NTP_H_ */
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __NTP_H__ */
