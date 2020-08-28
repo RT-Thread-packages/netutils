@@ -202,9 +202,11 @@ int tftp_send_request(struct tftp_xfer *xfer, uint16_t cmd, const char *remote_f
     }
     /* Packing request packet header */
     send_packet->cmd = htons(cmd);
-    size = sprintf(send_packet->info.filename, "%s%c%s%c%d%c", remote_file, 0, xfer->mode, 0, xfer->blksize, 0) + 3;
+    size = sprintf(send_packet->info.filename, "%s%c%s%c%s%c%d%c%s%c%d%c",
+        remote_file, 0, xfer->mode, 0, "blksize", 0, xfer->blksize, 0,"tsize", 0, 0, 0) + 2;
     /* send data */
-    r_size = sendto(xfer->sock, send_packet, size, 0, (struct sockaddr *)&_private->server, sizeof(struct sockaddr_in));
+    r_size = sendto(xfer->sock, send_packet, size, 0,
+        (struct sockaddr *)&_private->server, sizeof(struct sockaddr_in));
     free(send_packet);
     if (size != r_size)
     {

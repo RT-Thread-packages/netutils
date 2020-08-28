@@ -32,6 +32,7 @@
 struct tftp_client
 {
     int max_retry;
+    int err;
     void *_private;
 };
 
@@ -47,6 +48,7 @@ struct tftp_client *tftp_client_create(const char *ip_addr, int port);
 void tftp_client_destroy(struct tftp_client *client);
 int tftp_client_push(struct tftp_client *client, const char *local_name, const char *remote_name);
 int tftp_client_pull(struct tftp_client *client, const char *remote_name, const char *local_name);
+int tftp_client_err(struct tftp_client *client);
 struct tftp_server *tftp_server_create(const char *root_name, int port);
 void tftp_server_run(struct tftp_server *server);
 void tftp_server_destroy(struct tftp_server *server);
