@@ -74,6 +74,8 @@ struct tftp_client *tftp_client_create(const char *ip_addr, int port)
     }
     /* Number of Initial Retries */
     client->max_retry = TFTP_MAX_RETRY;
+    /* Initialization error number */
+    client->err = TFTP_OK;
     /* Binding Private Data */
     client->_private = _private;
     return client;
@@ -102,6 +104,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
 
     _private = client->_private;
     max_retry = client->max_retry;
+    client->err = TFTP_OK;
     while (max_retry)
     {
         /* Send Write Request */
@@ -110,6 +113,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
         {
             tftp_printf("tftp send request failed !! retry:%d. exit\n", client->max_retry - max_retry);
             max_retry = 0;
+            client->err = res;
             break;
         }
         /* Waiting for server response */
@@ -121,15 +125,16 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
         }
         else if (res == -TFTP_ETIMEOUT)
         {
-            tftp_printf("tftp selct timeout. retry\n");
+            tftp_printf("tftp wait response timeout. retry\n");
             max_retry --;
             continue;
         }
         else
         {
             /* Waiting for Response Error */
-            tftp_printf("tftp selct err:%d. exit\n", res);
+            tftp_printf("tftp wait response err:%d. exit\n", res);
             max_retry = 0;
+            client->err = res;
             break;
         }
     }
@@ -143,6 +148,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
     if (res != TFTP_OK)
     {
         tftp_printf("wait ack failed!! exit\n");
+        client->err = res;
         return res;
     }
     /* Open file */
@@ -150,6 +156,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
     if (fp == NULL)
     {
         tftp_printf("open file \"%s\" error.\n", local_name);
+        client->err = -TFTP_EFILE;
         return -TFTP_EFILE;
     }
     pack = malloc(sizeof(struct tftp_packet));
@@ -157,6 +164,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
     {
         tftp_transfer_err(_private->xfer, 0, "malloc pack failed!");
         tftp_file_close(fp);
+        client->err = -TFTP_EMEM;
         return -TFTP_EMEM;
     }
     while (1)
@@ -166,6 +174,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
         if (r_size < 0)
         {
             max_retry = 0;
+            client->err = -TFTP_EFILE;
             break;
         }
         max_retry = client->max_retry;
@@ -177,6 +186,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
             {
                 tftp_transfer_err(_private->xfer, 0, "send file err!");
                 max_retry = 0;
+                client->err = -TFTP_EDATA;
                 break;
             }
             /* Wait server ACK */
@@ -188,14 +198,15 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
             }
             else if (res == -TFTP_ETIMEOUT)
             {
-                tftp_printf("tftp selct timeout. retry\n");
+                tftp_printf("tftp wait response timeout. retry\n");
                 max_retry --;
                 continue;
             }
             else
             {
-                tftp_printf("tftp selct err:%d. exit\n", res);
+                tftp_printf("tftp wait response err:%d. exit\n", res);
                 max_retry = 0;
+                client->err = res;
                 break;
             }
         }
@@ -208,6 +219,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
         if (tftp_wait_ack(_private->xfer) != TFTP_OK)
         {
             tftp_printf("wait ack failed!! exit\n");
+            client->err = -TFTP_EACK;
             break;
         }
         file_size += r_size;
@@ -234,6 +246,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
 
     _private = client->_private;
     max_retry = client->max_retry;
+    client->err = TFTP_OK;
     while (max_retry)
     {
         /* Send Read File Request */
@@ -242,6 +255,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
         {
             tftp_printf("tftp send request failed !! retry:%d. exit\n", max_retry);
             max_retry = 0;
+            client->err = res;
             break;
         }
         /* Waiting for the server to respond to the request */
@@ -253,16 +267,17 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
         }
         else if (res == -TFTP_ETIMEOUT)
         {
-            tftp_printf("tftp selct timeout. retry\n");
+            tftp_printf("tftp wait response timeout. retry\n");
             max_retry --;
             continue;
         }
         else
         {
-            tftp_printf("tftp selct err:%d. exit\n", res);
+            tftp_printf("tftp wait response err:%d. exit\n", res);
             max_retry = 0;
+            client->err = res;
             break;
-        }        
+        }
     }
 
     /* More than the maximum number of retries. exit */
@@ -276,6 +291,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
     if (fp == NULL)
     {
         tftp_printf("open file \"%s\" error.\n", local_name);
+        client->err = -TFTP_EFILE;
         return -TFTP_EFILE;
     }
     pack = malloc(sizeof(struct tftp_packet));
@@ -284,6 +300,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
         /* malloc failed. send err msg and exit */
         tftp_transfer_err(_private->xfer, 0, "malloc pack failed!");
         tftp_file_close(fp);
+        client->err = -TFTP_EMEM;
         return -TFTP_EMEM;
     }
     while (1)
@@ -294,6 +311,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
         if (recv_size < 0)
         {
             tftp_printf("read data err[%d]! exit\n", recv_size);
+            client->err = -TFTP_EDATA;
             break;
         }
         /* Write data to file */
@@ -302,6 +320,7 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
         {
             tftp_printf("write file err! exit\n");
             tftp_transfer_err(_private->xfer, 0, "write file err!");
+            client->err = -TFTP_EFILE;
             break;
         }
         file_size += recv_size;
@@ -324,13 +343,14 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
             }
             else if (res == -TFTP_ETIMEOUT)
             {
-                tftp_printf("tftp selct timeout. retry\n");
+                tftp_printf("tftp wait response timeout. retry\n");
                 max_retry --;
             }
             else
             {
-                tftp_printf("tftp selct err:%d. exit\n", res);
+                tftp_printf("tftp wait response err:%d. exit\n", res);
                 max_retry = 0;
+                client->err = res;
                 break;
             }
         }
@@ -343,4 +363,9 @@ int tftp_client_pull(struct tftp_client *client, const char *remote_name, const 
     tftp_file_close(fp);
     free(pack);
     return file_size;
+}
+
+int tftp_client_err(struct tftp_client *client)
+{
+    return client->err;
 }
