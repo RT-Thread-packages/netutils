@@ -161,19 +161,19 @@ msh />
 - Enter the `list_thread` command to view the running threads, the thread name is `tdth`, details are as follows:
 
 ```
-thread pri status sp stack size max used left tick error
--------- --- ------- ---------- ---------- ------ ------ ---- ---
-tdth 12 suspend 0x000000ac 0x00000800 08% 0x0000000a 000
-tshell 20 ready 0x00000070 0x00001000 22% 0x00000003 000
-rp80 8 suspend 0x0000009c 0x00000400 15% 0x0000000a 000
-phy 30 suspend 0x00000070 0x00000200 28% 0x00000001 000
-usbd 8 suspend 0x00000098 0x00001000 03% 0x00000014 000
-tcpip 10 suspend 0x000000b4 0x00000400 39% 0x00000014 000
-etx 12 suspend 0x00000084 0x00000400 12% 0x00000010 000
-erx 12 suspend 0x00000084 0x00000400 34% 0x00000010 000
-mmcsd_de 22 suspend 0x0000008c 0x00000400 49% 0x00000013 000
-tidle 31 ready 0x00000054 0x00000100 32% 0x0000001a 000
-main 10 suspend 0x00000064 0x00000800 35% 0x00000010 000
+thread   pri  status      sp     stack size max used left tick  error
+-------- ---  ------- ---------- ----------  ------  ---------- ---
+tdth      12  suspend 0x000000ac 0x00000800    08%   0x0000000a 000
+tshell    20  ready   0x00000070 0x00001000    22%   0x00000003 000
+rp80       8  suspend 0x0000009c 0x00000400    15%   0x0000000a 000
+phy       30  suspend 0x00000070 0x00000200    28%   0x00000001 000
+usbd       8  suspend 0x00000098 0x00001000    03%   0x00000014 000
+tcpip     10  suspend 0x000000b4 0x00000400    39%   0x00000014 000
+etx       12  suspend 0x00000084 0x00000400    12%   0x00000010 000
+erx       12  suspend 0x00000084 0x00000400    34%   0x00000010 000
+mmcsd_de  22  suspend 0x0000008c 0x00000400    49%   0x00000013 000
+tidle     31  ready   0x00000054 0x00000100    32%   0x0000001a 000
+main      10  suspend 0x00000064 0x00000800    35%   0x00000010 000
 msh />
 ```
 

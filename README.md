@@ -18,7 +18,7 @@ Each gadget can be enabled/disabled independently using menuconfig and provides 
 
 | Name | Classification | Function Introduction | Use Document |
 | :--------------------------- | :------: | :--------------------------------------------------------- | :---------------------------- |
-| [Ping](ping/README-en.md) | Debugging test | Use the "ping" command to check whether the network is connected, which can help us analyze and determine network failures | [click to view](ping/README-en .md) |
+| [Ping](ping/README-en.md) | Debugging test | Use the "ping" command to check whether the network is connected, which can help us analyze and determine network failures | [click to view](ping/README-en.md) |
 | [TFTP](tftp/README-en.md) | File transfer | TFTP is a simple protocol for transferring files, which is lighter than FTP | [click to view](tftp/README-en.md) |
 | [iperf](iperf/README-en.md) | Performance Test | Test maximum TCP and UDP bandwidth performance, report bandwidth, delay jitter and packet loss | [Click to view](iperf/README-en.md) |
 | [NetIO](netio/README-en.md) | Performance Test | Tools for testing network throughput | [Click to view](netio/README-en.md) |
