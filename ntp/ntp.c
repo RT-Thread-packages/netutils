@@ -385,9 +385,9 @@ time_t ntp_sync_to_rtc(const char *host_name)
 #else
         rt_device_control(rt_device_find("rtc"), RT_DEVICE_CTRL_RTC_SET_TIME, &cur_time);
 #endif /*RT_VER_NUM <= 0x40003*/
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
+        LOG_I("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 #else
-        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
+        LOG_E("The system time update failed. Please enable RT_USING_RTC.\n");
         cur_time = 0;
 #endif /* RT_USING_RTC */
     }
@@ -427,7 +427,7 @@ static int rt_rtc_ntp_sync_init(void)
         return 0;
     }
 
-    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 2048, 26, 2);
+    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 1300, 26, 2);
     if (thread)
     {
         rt_thread_startup(thread);
