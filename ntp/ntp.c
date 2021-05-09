@@ -400,6 +400,55 @@ static void ntp_sync(const char *host_name)
     }
 }
 
+/* NTP first sync delay time for network connect, unit: second */
+#ifndef RTC_NTP_FIRST_SYNC_DELAY
+#define RTC_NTP_FIRST_SYNC_DELAY                 (30)
+#endif
+/* NTP sync period, unit: second */
+#ifndef RTC_NTP_SYNC_PERIOD
+#define RTC_NTP_SYNC_PERIOD                      (1L*60L*60L)
+#endif
+
+static void ntp_sync_thread_enrty(void *param)
+{
+    /* first sync delay for network connect */
+    rt_thread_delay(RTC_NTP_FIRST_SYNC_DELAY * RT_TICK_PER_SECOND);
+
+    while (1)
+    {
+        ntp_sync_to_rtc(NULL);
+        rt_thread_delay(RTC_NTP_SYNC_PERIOD * RT_TICK_PER_SECOND);
+    }
+}
+
+static int rt_rtc_ntp_sync_init(void)
+{
+    static rt_bool_t init_ok = RT_FALSE;
+    rt_thread_t thread;
+
+    if (init_ok)
+    {
+        return 0;
+    }
+
+    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 2048, 26, 2);
+    if (thread)
+    {
+        rt_thread_startup(thread);
+    }
+    else
+    {
+        return -RT_ENOMEM;
+    }
+
+    init_ok = RT_TRUE;
+
+    return RT_EOK;
+}
+INIT_COMPONENT_EXPORT(rt_rtc_ntp_sync_init);
+
+#ifdef FINSH_USING_MSH
+#include <finsh.h>
 static void cmd_ntp_sync(int argc, char **argv)
 {
     char *host_name = NULL;
@@ -411,10 +460,7 @@ static void cmd_ntp_sync(int argc, char **argv)
 
     ntp_sync(host_name);
 }
-
-#ifdef RT_USING_FINSH
-#include <finsh.h>
-FINSH_FUNCTION_EXPORT(ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync(host_name));
 MSH_CMD_EXPORT_ALIAS(cmd_ntp_sync, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
+
 #endif /* PKG_NETUTILS_NTP */
