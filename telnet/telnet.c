@@ -358,7 +358,7 @@ static void telnet_thread(void* parameter)
     telnet->device.type     = RT_Device_Class_Char;
 #ifdef RT_USING_DEVICE_OPS
     telnet->device.ops = &_ops;
-#else    
+#else
     telnet->device.init     = telnet_init;
     telnet->device.open     = telnet_open;
     telnet->device.close    = telnet_close;

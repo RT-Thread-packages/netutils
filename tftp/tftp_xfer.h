@@ -28,7 +28,7 @@
 
 #define XFER_DATA_SIZE_MAX (512)
 
-union file_info 
+union file_info
 {
     uint16_t code;
     uint16_t block;
