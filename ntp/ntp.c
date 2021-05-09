@@ -59,11 +59,8 @@ extern int closesocket(int s);
 #include <rtdbg.h>
 
 #if RT_VER_NUM <= 0x40003
-#ifdef NETUTILS_NTP_TIMEZONE
-#define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
-#endif
-#ifndef NTP_TIMEZONE
-#define NTP_TIMEZONE                   8
+#ifndef NETUTILS_NTP_TIMEZONE
+#define NETUTILS_NTP_TIMEZONE                   8
 #endif
 #endif
 
@@ -342,7 +339,7 @@ __exit:
  *
  * @param host_name NTP server host name, NULL: will using default host name
  *
- * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
+ * @return >0: success, current local time, offset timezone by NETUTILS_NTP_TIMEZONE
  *         =0: get failed
  */
 time_t ntp_get_local_time(const char *host_name)
@@ -352,7 +349,7 @@ time_t ntp_get_local_time(const char *host_name)
     if (cur_time)
     {
         /* add the timezone offset for set_time/set_date */
-        cur_time += NTP_TIMEZONE * 3600;
+        cur_time += NETUTILS_NTP_TIMEZONE * 3600;
     }
 
     return cur_time;
