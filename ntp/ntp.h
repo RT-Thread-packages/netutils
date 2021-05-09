@@ -21,6 +21,7 @@
  * Date           Author       Notes
  * 2018-02-10     armink       the first version
  * 2020-07-21     Chenxuan     C++ support
+ * 2021-05-09     Meco Man     remove timezone function
  */
 
 #ifndef __NTP_H__
@@ -44,6 +45,7 @@ extern "C" {
  */
 time_t ntp_get_time(const char *host_name);
 
+#if RT_VER_NUM <= 0x40003
 /**
  * Get the local time from NTP server
  *
@@ -53,6 +55,7 @@ time_t ntp_get_time(const char *host_name);
  *         =0: get failed
  */
 time_t ntp_get_local_time(const char *host_name);
+#endif
 
 /**
  * Sync current local time to RTC by NTP

@@ -16,6 +16,11 @@
  *
  * Usage: $ ./ntpClient.out
  *
+ * Change Logs:
+ * Date           Author       Notes
+ * 2018-02-10     armink       the first version
+ * 2020-07-21     Chenxuan     C++ support
+ * 2021-05-09     Meco Man     remove timezone function
  */
 
 #include <rtthread.h>
@@ -53,8 +58,13 @@ extern int closesocket(int s);
 #define DBG_LEVEL                      DBG_INFO
 #include <rtdbg.h>
 
+#if RT_VER_NUM <= 0x40003
 #ifdef NETUTILS_NTP_TIMEZONE
 #define NTP_TIMEZONE                   NETUTILS_NTP_TIMEZONE
+#endif
+#ifndef NTP_TIMEZONE
+#define NTP_TIMEZONE                   8
+#endif
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME
@@ -76,10 +86,6 @@ extern int closesocket(int s);
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
-
-#ifndef NTP_TIMEZONE
-#define NTP_TIMEZONE                   8
-#endif
 
 #define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
@@ -113,7 +119,7 @@ typedef struct {
     uint32_t txTm_s;         // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
     uint32_t txTm_f;         // 32 bits. Transmit time-stamp fraction of a second.
 
-} ntp_packet;              // Total: 384 bits or 48 bytes.
+} ntp_packet;                // Total: 384 bits or 48 bytes.
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -133,7 +139,7 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
     else
     {
         /* Zero out the server address structure. */
-        memset((char *)serv_addr, 0, addr_len);
+        rt_memset((char *)serv_addr, 0, addr_len);
 
         serv_addr->sin_family = AF_INET;
 
@@ -141,7 +147,7 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
         serv_addr->sin_port = htons(portno);
 
         /* Copy the server's IP address to the server address structure. */
-        memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
+        rt_memcpy(&serv_addr->sin_addr.s_addr, (char *) server->h_addr, server->h_length);
 
         return sendto(sockfd, (char *) &packet, sizeof(ntp_packet), 0, (const struct sockaddr *)serv_addr, addr_len);
     }
@@ -154,7 +160,7 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
  *
  * @note this function is not reentrant
  *
- * @return >0: success, current UTC time
+ * @return >0: success, current GMT time
  *         =0: get failed
  */
 time_t ntp_get_time(const char *host_name)
@@ -174,7 +180,7 @@ time_t ntp_get_time(const char *host_name)
     const char *const host_name_buf[NTP_SERVER_NUM] = {NTP_HOSTNAME1, NTP_HOSTNAME2, NTP_HOSTNAME3};
 
     /* Create and zero out the packet. All 48 bytes worth. */
-    memset(&packet, 0, sizeof(ntp_packet));
+    rt_memset(&packet, 0, sizeof(ntp_packet));
 
     /* Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
        Represents 27 in base 10 or 00011011 in base 2. */
@@ -330,6 +336,7 @@ __exit:
     return new_time;
 }
 
+#if RT_VER_NUM <= 0x40003
 /**
  * Get the local time from NTP server
  *
@@ -350,56 +357,45 @@ time_t ntp_get_local_time(const char *host_name)
 
     return cur_time;
 }
+#endif
 
 /**
  * Sync current local time to RTC by NTP
  *
  * @param host_name NTP server host name, NULL: will using default host name
  *
- * @return >0: success, current local time, offset timezone by NTP_TIMEZONE
+ * @return >0: success
  *         =0: sync failed
  */
 time_t ntp_sync_to_rtc(const char *host_name)
 {
-#ifdef RT_USING_RTC
-    struct tm *cur_tm;
-#endif
-
+#if RT_VER_NUM <= 0x40003
     time_t cur_time = ntp_get_local_time(host_name);
-
+#else
+    time_t cur_time = ntp_get_time(host_name); /*after v4.0.3, RT-Thread takes over the timezone management*/
+#endif
     if (cur_time)
     {
-
 #ifdef RT_USING_RTC
+#if RT_VER_NUM <= 0x40003
+        struct tm *cur_tm;
         cur_tm = localtime(&cur_time);
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
-
-        cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
+#else
+        rt_device_control(rt_device_find("rtc"), RT_DEVICE_CTRL_RTC_SET_TIME, &cur_time);
+#endif /*RT_VER_NUM <= 0x40003*/
+        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
+#else
+        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
+        cur_time = 0;
 #endif /* RT_USING_RTC */
-
     }
 
     return cur_time;
 }
 
-static void ntp_sync(const char *host_name)
-{
-    time_t cur_time = ntp_sync_to_rtc(host_name);
-
-    if (cur_time)
-    {
-        rt_kprintf("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
-
-#ifdef RT_USING_RTC
-        rt_kprintf("The system time is updated. Timezone is %d.\n", NTP_TIMEZONE);
-#else
-        rt_kprintf("The system time update failed. Please enable RT_USING_RTC.\n");
-#endif /* RT_USING_RTC */
-
-    }
-}
-
+#if RT_VER_NUM > 0x40003
 /* NTP first sync delay time for network connect, unit: second */
 #ifndef RTC_NTP_FIRST_SYNC_DELAY
 #define RTC_NTP_FIRST_SYNC_DELAY                 (30)
@@ -446,6 +442,7 @@ static int rt_rtc_ntp_sync_init(void)
     return RT_EOK;
 }
 INIT_COMPONENT_EXPORT(rt_rtc_ntp_sync_init);
+#endif
 
 #ifdef FINSH_USING_MSH
 #include <finsh.h>
@@ -458,7 +455,7 @@ static void cmd_ntp_sync(int argc, char **argv)
         host_name = argv[1];
     }
 
-    ntp_sync(host_name);
+    ntp_sync_to_rtc(host_name);
 }
 MSH_CMD_EXPORT_ALIAS(cmd_ntp_sync, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
