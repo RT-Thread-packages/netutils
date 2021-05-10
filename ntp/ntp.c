@@ -424,7 +424,7 @@ static int rt_rtc_ntp_sync_init(void)
         return 0;
     }
 
-    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 1300, 26, 2);
+    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 1300, RT_THREAD_PRIORITY_MAX - 2, 20);
     if (thread)
     {
         rt_thread_startup(thread);
