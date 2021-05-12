@@ -376,7 +376,7 @@ static struct tftp_client_xfer *tftp_server_request_handle(struct tftp_server *s
         }
     }
     /* Get full file path */
-    name_len = strlen(path) + strlen(server->root_name) + 1;
+    name_len = strlen(path) + strlen(server->root_name) + 2;
     if (name_len >= TFTP_SERVER_FILE_NAME_MAX)
     {
         tftp_printf("file name is to long!!\n");
