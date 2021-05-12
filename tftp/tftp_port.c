@@ -80,7 +80,7 @@ struct _tftp_cmd
     int cmd;
 };
 
-static const struct _tftp_cmd _cmd_tab[] = 
+static const struct _tftp_cmd _cmd_tab[] =
 {
     {"-s", "begin tftp server", _S_MODE_CMD},
     {"-w", "client write file to server", _CW_MODE_CMD},
