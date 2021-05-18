@@ -12,11 +12,9 @@
 
 ### 2.1 启用 NTP 时间自动同步
 
-如果 RT-Thread 已接入互联网，可启用 NTP 时间自动同步功能，定期同步本地时间。
+如果 RT-Thread 已接入互联网，可启用 NTP 时间自动同步功能，定期同步本地时间。务必确保 RT-Thread 网络访问正常。
 
-在 menuconfig 中启用 `RTC_SYNC_USING_NTP` 配置。启用该功能后，会自动开启 [netutils package](https://github.com/RT-Thread-packages/netutils) 的 NTP 功能。同时务必确保 RT-Thread 网络访问正常。
-
-启用该配置后，还有三个配置是用户可选配置：
+有三个配置是用户可选配置：
 
 - 在配置选项中，默认提供了 3 个 NTP 服务器，保证了 NTP 功能的可靠性。
 - `RTC_NTP_FIRST_SYNC_DELAY`: 首次执行 NTP 时间同步的延时。延时的目的在于，给网络连接预留一定的时间，尽量提高第一次执行 NTP 时间同步时的成功率。默认时间为 30S；
