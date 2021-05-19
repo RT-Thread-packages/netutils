@@ -84,39 +84,39 @@ extern int closesocket(int s);
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
 
-#define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) // (li   & 11 000 000) >> 6
-#define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
-#define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
+#define LI(packet)   (uint8_t) ((packet.li_vn_mode & 0xC0) >> 6) /* (li   & 11 000 000) >> 6 */
+#define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) /* (vn   & 00 111 000) >> 3 */
+#define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) /* (mode & 00 000 111) >> 0 */
 
-// Structure that defines the 48 byte NTP packet protocol.
+/* Structure that defines the 48 byte NTP packet protocol */
 typedef struct {
 
-    uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
-                             // li.   Two bits.   Leap indicator.
-                             // vn.   Three bits. Version number of the protocol.
-                             // mode. Three bits. Client will pick mode 3 for client.
+    uint8_t li_vn_mode;      /* Eight bits. li, vn, and mode */
+                             /* li.   Two bits.   Leap indicator */
+                             /* vn.   Three bits. Version number of the protocol */
+                             /* mode. Three bits. Client will pick mode 3 for client */
 
-    uint8_t stratum;         // Eight bits. Stratum level of the local clock.
-    uint8_t poll;            // Eight bits. Maximum interval between successive messages.
-    uint8_t precision;       // Eight bits. Precision of the local clock.
+    uint8_t stratum;         /* Eight bits. Stratum level of the local clock */
+    uint8_t poll;            /* Eight bits. Maximum interval between successive messages */
+    uint8_t precision;       /* Eight bits. Precision of the local clock */
 
-    uint32_t rootDelay;      // 32 bits. Total round trip delay time.
-    uint32_t rootDispersion; // 32 bits. Max error aloud from primary clock source.
-    uint32_t refId;          // 32 bits. Reference clock identifier.
+    uint32_t rootDelay;      /* 32 bits. Total round trip delay time */
+    uint32_t rootDispersion; /* 32 bits. Max error aloud from primary clock source */
+    uint32_t refId;          /* 32 bits. Reference clock identifier */
 
-    uint32_t refTm_s;        // 32 bits. Reference time-stamp seconds.
-    uint32_t refTm_f;        // 32 bits. Reference time-stamp fraction of a second.
+    uint32_t refTm_s;        /* 32 bits. Reference time-stamp seconds */
+    uint32_t refTm_f;        /* 32 bits. Reference time-stamp fraction of a second */
 
-    uint32_t origTm_s;       // 32 bits. Originate time-stamp seconds.
-    uint32_t origTm_f;       // 32 bits. Originate time-stamp fraction of a second.
+    uint32_t origTm_s;       /* 32 bits. Originate time-stamp seconds */
+    uint32_t origTm_f;       /* 32 bits. Originate time-stamp fraction of a second */
 
-    uint32_t rxTm_s;         // 32 bits. Received time-stamp seconds.
-    uint32_t rxTm_f;         // 32 bits. Received time-stamp fraction of a second.
+    uint32_t rxTm_s;         /* 32 bits. Received time-stamp seconds */
+    uint32_t rxTm_f;         /* 32 bits. Received time-stamp fraction of a second */
 
-    uint32_t txTm_s;         // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
-    uint32_t txTm_f;         // 32 bits. Transmit time-stamp fraction of a second.
+    uint32_t txTm_s;         /* 32 bits and the most important field the client cares about. Transmit time-stamp seconds */
+    uint32_t txTm_f;         /* 32 bits. Transmit time-stamp fraction of a second */
 
-} ntp_packet;                // Total: 384 bits or 48 bytes.
+} ntp_packet;                /* Total: 384 bits or 48 bytes */
 
 static ntp_packet packet = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -393,28 +393,29 @@ time_t ntp_sync_to_rtc(const char *host_name)
 }
 
 #if RT_VER_NUM > 0x40003
+#ifdef NTP_USING_AUTO_SYNC
 /* NTP first sync delay time for network connect, unit: second */
-#ifndef RTC_NTP_FIRST_SYNC_DELAY
-#define RTC_NTP_FIRST_SYNC_DELAY                 (30)
+#ifndef NTP_AUTO_SYNC_FIRST_DELAY
+#define NTP_AUTO_SYNC_FIRST_DELAY                 (30)
 #endif
 /* NTP sync period, unit: second */
-#ifndef RTC_NTP_SYNC_PERIOD
-#define RTC_NTP_SYNC_PERIOD                      (1L*60L*60L)
+#ifndef NTP_AUTO_SYNC_PERIOD
+#define NTP_AUTO_SYNC_PERIOD                      (1L*60L*60L)
 #endif
 
 static void ntp_sync_thread_enrty(void *param)
 {
     /* first sync delay for network connect */
-    rt_thread_delay(RTC_NTP_FIRST_SYNC_DELAY * RT_TICK_PER_SECOND);
+    rt_thread_delay(NTP_AUTO_SYNC_FIRST_DELAY * RT_TICK_PER_SECOND);
 
     while (1)
     {
         ntp_sync_to_rtc(NULL);
-        rt_thread_delay(RTC_NTP_SYNC_PERIOD * RT_TICK_PER_SECOND);
+        rt_thread_delay(NTP_AUTO_SYNC_PERIOD * RT_TICK_PER_SECOND);
     }
 }
 
-static int rt_rtc_ntp_sync_init(void)
+static int ntp_auto_sync_init(void)
 {
     static rt_bool_t init_ok = RT_FALSE;
     rt_thread_t thread;
@@ -424,7 +425,7 @@ static int rt_rtc_ntp_sync_init(void)
         return 0;
     }
 
-    thread = rt_thread_create("ntp_sync", ntp_sync_thread_enrty, RT_NULL, 1300, RT_THREAD_PRIORITY_MAX - 2, 20);
+    thread = rt_thread_create("ntp-sync", ntp_sync_thread_enrty, RT_NULL, 1300, RT_THREAD_PRIORITY_MAX - 2, 20);
     if (thread)
     {
         rt_thread_startup(thread);
@@ -438,8 +439,9 @@ static int rt_rtc_ntp_sync_init(void)
 
     return RT_EOK;
 }
-INIT_COMPONENT_EXPORT(rt_rtc_ntp_sync_init);
-#endif
+INIT_COMPONENT_EXPORT(ntp_auto_sync_init);
+#endif /*NTP_USING_AUTO_SYNC*/
+#endif /*RT_VER_NUM > 0x40003*/
 
 #ifdef FINSH_USING_MSH
 #include <finsh.h>
