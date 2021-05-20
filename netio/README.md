@@ -13,7 +13,7 @@ RT-Thread 目前支持的是 NetIO TCP 服务器。
 需要在 RT-Thread 上使用 Finsh/MSH 命令来启动 NetIO 服务器，大致效果如下：
 
 ```
-msh />netio_init
+msh />netio
 NetIO server start successfully
 msh />
 ```
