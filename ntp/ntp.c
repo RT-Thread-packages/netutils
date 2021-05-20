@@ -394,6 +394,9 @@ time_t ntp_sync_to_rtc(const char *host_name)
 
 #if RT_VER_NUM > 0x40003
 #ifdef NTP_USING_AUTO_SYNC
+#ifndef NTP_AUTO_SYNC_THREAD_STACK_SIZE
+#define NTP_AUTO_SYNC_THREAD_STACK_SIZE           (1500)
+#endif
 /* NTP first sync delay time for network connect, unit: second */
 #ifndef NTP_AUTO_SYNC_FIRST_DELAY
 #define NTP_AUTO_SYNC_FIRST_DELAY                 (30)
@@ -425,7 +428,8 @@ static int ntp_auto_sync_init(void)
         return 0;
     }
 
-    thread = rt_thread_create("ntp-sync", ntp_sync_thread_enrty, RT_NULL, 1300, RT_THREAD_PRIORITY_MAX - 2, 20);
+    thread = rt_thread_create("ntp-sync", ntp_sync_thread_enrty, RT_NULL,
+                NTP_AUTO_SYNC_THREAD_STACK_SIZE, RT_THREAD_PRIORITY_MAX - 2, 20);
     if (thread)
     {
         rt_thread_startup(thread);
