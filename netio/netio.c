@@ -37,10 +37,6 @@
 #include <rtthread.h>
 #include "lwip/tcp.h"
 
-#define DBG_SECTION_NAME               "netio"
-#define DBG_LEVEL                      DBG_INFO
-#include <rtdbg.h>
-
 /*
  * This implements a netio server.
  *  The client sends a command word (4 bytes) then a data length word (4 bytes).
@@ -435,11 +431,11 @@ static void netio_init(void)
         pcb = tcp_listen(pcb);
         tcp_accept(pcb, netio_accept);
         init_ok = RT_TRUE;
-        LOG_I("netio server start successfully");
+        rt_kprintf("netio server starts successfully\n");
     }
     else
     {
-        LOG_I("netio server has already run");
+        rt_kprintf("netio server has already run");
     }
 }
 #ifdef FINSH_USING_MSH
