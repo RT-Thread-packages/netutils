@@ -31,12 +31,10 @@
  *
  */
 
-#include <rtthread.h>
-
-#ifdef PKG_NETUTILS_NETIO
 #include "lwip/opt.h"
 
 #if LWIP_TCP
+#include <rtthread.h>
 #include "lwip/tcp.h"
 
 /*
@@ -420,7 +418,7 @@ netio_accept(void *arg, struct tcp_pcb *pcb, err_t err)
     return ERR_OK;
 }
 
-void netio_init(void)
+static void netio_init(void)
 {
     static rt_bool_t init_ok = RT_FALSE;
     struct tcp_pcb *pcb;
@@ -433,21 +431,15 @@ void netio_init(void)
         pcb = tcp_listen(pcb);
         tcp_accept(pcb, netio_accept);
         init_ok = RT_TRUE;
-        rt_kprintf("NetIO server start successfully\n");
+        rt_kprintf("netio server starts successfully\n");
     }
     else
     {
-        rt_kprintf("netio: server already running\n");
+        rt_kprintf("netio server has already run");
     }
 }
-
-#endif /* LWIP_TCP */
-
-#ifdef RT_USING_FINSH
-#include <finsh.h>
-FINSH_FUNCTION_EXPORT(netio_init, netio server);
 #ifdef FINSH_USING_MSH
-MSH_CMD_EXPORT(netio_init, netio server);
+#include <finsh.h>
+MSH_CMD_EXPORT_ALIAS(netio_init, netio, initalise netio server);
 #endif /* FINSH_USING_MSH */
-#endif /* RT_USING_FINSH */
-#endif /* PKG_NETUTILS_NETIO */
+#endif /* LWIP_TCP */
