@@ -25,7 +25,6 @@
 
 #include <rtthread.h>
 
-#ifdef PKG_NETUTILS_NTP
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -184,7 +183,7 @@ time_t ntp_get_time(const char *host_name)
     *((char *) &packet + 0) = 0x1b;
 
 #if defined(RT_USING_NETDEV) || defined(RT_USING_LWIP)
-    {   
+    {
         #define NTP_INTERNET           0x02
         #define NTP_INTERNET_BUFF_LEN  18
         #define NTP_INTERNET_MONTH_LEN 4
@@ -193,7 +192,7 @@ time_t ntp_get_time(const char *host_name)
         #define SW_VER_NUM             0x00000000
         #endif
 
-        const char month[][NTP_INTERNET_MONTH_LEN] = 
+        const char month[][NTP_INTERNET_MONTH_LEN] =
             {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
         char date[NTP_INTERNET_DATE_LEN] = {0};
         uint8_t send_data[NTP_INTERNET_BUFF_LEN] = {0};
@@ -248,7 +247,7 @@ time_t ntp_get_time(const char *host_name)
         rt_memcpy(((char *)&packet + 4), send_data, NTP_INTERNET_BUFF_LEN);
     }
 #endif /* RT_USING_NETDEV || RT_USING_LWIP */
-    
+
 
     /* Create a UDP socket. */
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -354,7 +353,7 @@ time_t ntp_get_local_time(const char *host_name)
 
     return cur_time;
 }
-#endif
+#endif /*RT_VER_NUM <= 0x40003*/
 
 /**
  * Sync current local time to RTC by NTP
@@ -370,7 +369,7 @@ time_t ntp_sync_to_rtc(const char *host_name)
     time_t cur_time = ntp_get_local_time(host_name);
 #else
     time_t cur_time = ntp_get_time(host_name); /*after v4.0.3, RT-Thread takes over the timezone management*/
-#endif
+#endif /*RT_VER_NUM <= 0x40003*/
     if (cur_time)
     {
 #ifdef RT_USING_RTC
@@ -462,5 +461,3 @@ static void cmd_ntp_sync(int argc, char **argv)
 }
 MSH_CMD_EXPORT_ALIAS(cmd_ntp_sync, ntp_sync, Update time by NTP(Network Time Protocol): ntp_sync [host_name]);
 #endif /* RT_USING_FINSH */
-
-#endif /* PKG_NETUTILS_NTP */
