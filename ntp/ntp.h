@@ -55,7 +55,7 @@ time_t ntp_get_time(const char *host_name);
  *         =0: get failed
  */
 time_t ntp_get_local_time(const char *host_name);
-#endif
+#endif /*RT_VER_NUM <= 0x40003*/
 
 /**
  * Sync current local time to RTC by NTP
