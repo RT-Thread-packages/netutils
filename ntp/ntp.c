@@ -377,6 +377,7 @@ time_t ntp_sync_to_rtc(const char *host_name)
         struct tm *cur_tm;
         cur_tm = localtime(&cur_time);
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
+        cur_tm = localtime(&cur_time);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
 #else
         rt_device_control(rt_device_find("rtc"), RT_DEVICE_CTRL_RTC_SET_TIME, &cur_time);
