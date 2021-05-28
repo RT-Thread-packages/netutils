@@ -301,9 +301,6 @@ static rt_size_t telnet_write (rt_device_t dev, rt_off_t pos, const void* buffer
     }
     rt_mutex_release(telnet->tx_ringbuffer_lock);
 
-    /* send data to telnet client */
-    send_to_client(telnet);
-
     return (rt_uint32_t) ptr - (rt_uint32_t) buffer;
 }
 
@@ -331,6 +328,9 @@ static void telnet_thread(void* parameter)
     socklen_t addr_size;
     rt_uint8_t recv_buf[RECV_BUF_LEN];
     rt_int32_t recv_len = 0;
+    struct timeval tm = {0};
+
+    tm.tv_sec = 1;
 
     if ((telnet->server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
@@ -382,6 +382,7 @@ static void telnet_thread(void* parameter)
         {
             continue;
         }
+        setsockopt(telnet->client_fd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(tm));
 
         rt_kprintf("telnet: new telnet client(%s:%d) connection, switch console to telnet...\n", inet_ntoa(addr.sin_addr), addr.sin_port);
 
@@ -426,15 +427,21 @@ static void telnet_thread(void* parameter)
             send_to_client(telnet);
 
             /* do a rx procedure */
-            if ((recv_len = recv(telnet->client_fd, recv_buf, RECV_BUF_LEN, 0)) > 0)
+            recv_len = recv(telnet->client_fd, recv_buf, RECV_BUF_LEN, 0);
+            if (recv_len > 0)
             {
                 process_rx(telnet, recv_buf, recv_len);
             }
             else
             {
-                /* close connection */
-                client_close(telnet);
-                break;
+                int err = 0;
+                err = errno;
+                if(err != EINTR && err != EWOULDBLOCK && err != EAGAIN)
+                {
+                    /* close connection */
+                    client_close(telnet);
+                    break;
+                }
             }
         }
     }
