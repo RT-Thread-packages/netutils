@@ -342,6 +342,7 @@ static void telnet_thread(void* parameter)
     if(setsockopt(telnet->server_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive, sizeof(keepalive)) < 0)
 	{
 		rt_kprintf("telnet:set socket keepalive failed\n");
+        return;
 	}
 
     addr.sin_family = AF_INET;
