@@ -21,6 +21,7 @@
  * 2018-02-10     armink       the first version
  * 2020-07-21     Chenxuan     C++ support
  * 2021-05-09     Meco Man     remove timezone function
+ * 2021-07-08     qiyongzhong  Add the waiting until the network is ready, fix bug of check timeout
  */
 
 #include <rtthread.h>
@@ -287,7 +288,7 @@ time_t ntp_get_time(const char *host_name)
     }
 
     start = rt_tick_get();
-    while (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    while (rt_tick_get() - start < NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         for (i = 0; i < server_num; i++)
         {
@@ -308,7 +309,7 @@ time_t ntp_get_time(const char *host_name)
 
 __exit:
 
-    if (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    if (rt_tick_get() - start < NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         /* These two fields contain the time-stamp seconds as the packet left the NTP server.
            The number of seconds correspond to the seconds passed since 1900.
@@ -406,6 +407,19 @@ time_t ntp_sync_to_rtc(const char *host_name)
 #define NTP_AUTO_SYNC_PERIOD                      (1L*60L*60L)
 #endif
 
+static void ntp_wait_network(void)
+{
+    while(1)
+    {
+        struct netdev * netdev = netdev_get_by_family(AF_INET);
+        if (netdev && netdev_is_link_up(netdev))
+        {
+            break;
+        }
+        rt_thread_mdelay(1000);
+    }    
+}
+
 static void ntp_sync_thread_enrty(void *param)
 {
     /* first sync delay for network connect */
@@ -413,6 +427,7 @@ static void ntp_sync_thread_enrty(void *param)
 
     while (1)
     {
+        ntp_wait_network();
         ntp_sync_to_rtc(NULL);
         rt_thread_delay(NTP_AUTO_SYNC_PERIOD * RT_TICK_PER_SECOND);
     }
