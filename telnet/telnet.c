@@ -331,12 +331,19 @@ static void telnet_thread(void* parameter)
     socklen_t addr_size;
     rt_uint8_t recv_buf[RECV_BUF_LEN];
     rt_int32_t recv_len = 0;
+    rt_int32_t keepalive = 1;
 
     if ((telnet->server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         rt_kprintf("telnet: create socket failed\n");
         return;
     }
+
+    if(setsockopt(telnet->server_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive, sizeof(keepalive)) < 0)
+	{
+        rt_kprintf("telnet:set socket keepalive failed\n");
+        return;
+	}
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(TELNET_PORT);
