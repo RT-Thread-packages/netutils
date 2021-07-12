@@ -411,8 +411,8 @@ static void ntp_wait_network(void)
 {
     while(1)
     {
-        struct netdev * netdev = netdev_get_by_family(AF_INET);
-        if (netdev && netdev_is_link_up(netdev))
+        struct netdev * netdev = netdev_get_first_by_flags(NETDEV_FLAG_LINK_UP);
+        if(netdev != RT_NULL)
         {
             break;
         }
