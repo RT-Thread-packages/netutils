@@ -67,19 +67,19 @@ extern int closesocket(int s);
 #ifdef NETUTILS_NTP_HOSTNAME
 #define NTP_HOSTNAME1                  NETUTILS_NTP_HOSTNAME
 #else
-#define NTP_HOSTNAME1                  NULL
+#define NTP_HOSTNAME1                  RT_NULL
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME2
 #define NTP_HOSTNAME2                  NETUTILS_NTP_HOSTNAME2
 #else
-#define NTP_HOSTNAME2                  NULL
+#define NTP_HOSTNAME2                  RT_NULL
 #endif
 
 #ifdef NETUTILS_NTP_HOSTNAME3
 #define NTP_HOSTNAME3                  NETUTILS_NTP_HOSTNAME3
 #else
-#define NTP_HOSTNAME3                  NULL
+#define NTP_HOSTNAME3                  RT_NULL
 #endif
 
 #define NTP_TIMESTAMP_DELTA            2208988800ull
@@ -128,7 +128,7 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
     int portno = 123;
 
     server = gethostbyname(host_name);
-    if (server == NULL)
+    if (server == RT_NULL)
     {
         LOG_D("No such host(%s)", host_name);
         return -RT_ERROR;
@@ -153,7 +153,7 @@ static int sendto_ntp_server(int sockfd, const char *host_name, struct sockaddr_
 /**
  * Get the UTC time from NTP server
  *
- * @param host_name NTP server host name, NULL: will using default host name
+ * @param host_name NTP server host name, RT_NULL: will using default host name
  *
  * @note this function is not reentrant
  *
@@ -271,7 +271,7 @@ time_t ntp_get_time(const char *host_name)
         /* use the static default NTP server */
         for (i = 0; i < NTP_SERVER_NUM; i++)
         {
-            if (host_name_buf[i] == NULL || strlen(host_name_buf[i]) == 0)
+            if (host_name_buf[i] == RT_NULL || strlen(host_name_buf[i]) == 0)
                 continue;
 
             if (sendto_ntp_server(sockfd, host_name_buf[i], &serv_addr[server_num]) >= 0)
@@ -337,7 +337,7 @@ __exit:
 /**
  * Get the local time from NTP server
  *
- * @param host_name NTP server host name, NULL: will using default host name
+ * @param host_name NTP server host name, RT_NULL: will using default host name
  *
  * @return >0: success, current local time, offset timezone by NETUTILS_NTP_TIMEZONE
  *         =0: get failed
@@ -359,7 +359,7 @@ time_t ntp_get_local_time(const char *host_name)
 /**
  * Sync current local time to RTC by NTP
  *
- * @param host_name NTP server host name, NULL: will using default host name
+ * @param host_name NTP server host name, RT_NULL: will using default host name
  *
  * @return >0: success
  *         =0: sync failed
@@ -409,7 +409,7 @@ static struct rt_work ntp_sync_work;
 
 static void ntp_sync_work_func(struct rt_work *work, void *work_data)
 {
-    ntp_sync_to_rtc(NULL);
+    ntp_sync_to_rtc(RT_NULL);
     rt_work_submit(&ntp_sync_work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
 }
 
@@ -432,7 +432,7 @@ static void ntp_sync_thread_enrty(void *param)
 
     while (1)
     {
-        ntp_sync_to_rtc(NULL);
+        ntp_sync_to_rtc(RT_NULL);
         rt_thread_delay(NTP_AUTO_SYNC_PERIOD * RT_TICK_PER_SECOND);
     }
 }
@@ -464,14 +464,14 @@ static int ntp_auto_sync_init(void)
 }
 #endif /* RT_USING_SYSTEM_WORKQUEUE */
 INIT_COMPONENT_EXPORT(ntp_auto_sync_init);
-#endif /*NTP_USING_AUTO_SYNC*/
-#endif /*RT_VER_NUM > 0x40003*/
+#endif /* NTP_USING_AUTO_SYNC */
+#endif /* RT_VER_NUM > 0x40003 */
 
 #ifdef FINSH_USING_MSH
 #include <finsh.h>
 static void cmd_ntp_sync(int argc, char **argv)
 {
-    char *host_name = NULL;
+    char *host_name = RT_NULL;
 
     if (argc > 1)
     {
