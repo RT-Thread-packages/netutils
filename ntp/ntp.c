@@ -21,6 +21,7 @@
  * 2018-02-10     armink       the first version
  * 2020-07-21     Chenxuan     C++ support
  * 2021-05-09     Meco Man     remove timezone function
+ * 2021-07-22     Meco Man     implement workqueue for NTP sync
  */
 
 #include <rtthread.h>
@@ -394,9 +395,6 @@ time_t ntp_sync_to_rtc(const char *host_name)
 
 #if RT_VER_NUM > 0x40003
 #ifdef NTP_USING_AUTO_SYNC
-#ifndef NTP_AUTO_SYNC_THREAD_STACK_SIZE
-#define NTP_AUTO_SYNC_THREAD_STACK_SIZE           (1500)
-#endif
 /* NTP first sync delay time for network connect, unit: second */
 #ifndef NTP_AUTO_SYNC_FIRST_DELAY
 #define NTP_AUTO_SYNC_FIRST_DELAY                 (30)
@@ -404,6 +402,27 @@ time_t ntp_sync_to_rtc(const char *host_name)
 /* NTP sync period, unit: second */
 #ifndef NTP_AUTO_SYNC_PERIOD
 #define NTP_AUTO_SYNC_PERIOD                      (1L*60L*60L)
+#endif
+
+#ifdef RT_USING_SYSTEM_WORKQUEUE
+static struct rt_work ntp_sync_work;
+
+static void ntp_sync_work_func(struct rt_work *work, void *work_data)
+{
+    ntp_sync_to_rtc(NULL);
+    rt_work_submit(&ntp_sync_work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
+}
+
+static int ntp_auto_sync_init(void)
+{
+    rt_work_init(&ntp_sync_work, ntp_sync_work_func, RT_NULL);
+    rt_work_submit(&ntp_sync_work, rt_tick_from_millisecond(NTP_AUTO_SYNC_FIRST_DELAY * 1000));
+    return RT_EOK;
+}
+
+#else
+#ifndef NTP_AUTO_SYNC_THREAD_STACK_SIZE
+#define NTP_AUTO_SYNC_THREAD_STACK_SIZE           (1500)
 #endif
 
 static void ntp_sync_thread_enrty(void *param)
@@ -443,6 +462,7 @@ static int ntp_auto_sync_init(void)
 
     return RT_EOK;
 }
+#endif /* RT_USING_SYSTEM_WORKQUEUE */
 INIT_COMPONENT_EXPORT(ntp_auto_sync_init);
 #endif /*NTP_USING_AUTO_SYNC*/
 #endif /*RT_VER_NUM > 0x40003*/
