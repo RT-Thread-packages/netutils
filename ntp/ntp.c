@@ -22,6 +22,7 @@
  * 2020-07-21     Chenxuan     C++ support
  * 2021-05-09     Meco Man     remove timezone function
  * 2021-07-22     Meco Man     implement workqueue for NTP sync
+ * 2021-08-02     qiyongzhong  fix bug of check timeout
  */
 
 #include <rtthread.h>
@@ -288,7 +289,7 @@ time_t ntp_get_time(const char *host_name)
     }
 
     start = rt_tick_get();
-    while (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    while (rt_tick_get() - start < NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         for (i = 0; i < server_num; i++)
         {
@@ -309,7 +310,7 @@ time_t ntp_get_time(const char *host_name)
 
 __exit:
 
-    if (rt_tick_get() <= start + NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
+    if (rt_tick_get() - start < NTP_GET_TIMEOUT * RT_TICK_PER_SECOND)
     {
         /* These two fields contain the time-stamp seconds as the packet left the NTP server.
            The number of seconds correspond to the seconds passed since 1900.
