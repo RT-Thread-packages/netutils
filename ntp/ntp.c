@@ -406,7 +406,6 @@ time_t ntp_sync_to_rtc(const char *host_name)
 #define NTP_AUTO_SYNC_PERIOD                      (1L*60L*60L)
 #endif
 
-#ifdef RT_USING_SYSTEM_WORKQUEUE
 static struct rt_work ntp_sync_work;
 static void ntp_sync_work_func(struct rt_work *work, void *work_data)
 {
@@ -420,50 +419,6 @@ static int ntp_auto_sync_init(void)
     rt_work_submit(&ntp_sync_work, rt_tick_from_millisecond(NTP_AUTO_SYNC_FIRST_DELAY * 1000));
     return RT_EOK;
 }
-
-#else
-#ifndef NTP_AUTO_SYNC_THREAD_STACK_SIZE
-#define NTP_AUTO_SYNC_THREAD_STACK_SIZE           (1500)
-#endif
-
-static void ntp_sync_thread_enrty(void *param)
-{
-    /* first sync delay for network connect */
-    rt_thread_delay(NTP_AUTO_SYNC_FIRST_DELAY * RT_TICK_PER_SECOND);
-
-    while (1)
-    {
-        ntp_sync_to_rtc(RT_NULL);
-        rt_thread_delay(NTP_AUTO_SYNC_PERIOD * RT_TICK_PER_SECOND);
-    }
-}
-
-static int ntp_auto_sync_init(void)
-{
-    static rt_bool_t init_ok = RT_FALSE;
-    rt_thread_t thread;
-
-    if (init_ok)
-    {
-        return 0;
-    }
-
-    thread = rt_thread_create("ntp-sync", ntp_sync_thread_enrty, RT_NULL,
-                NTP_AUTO_SYNC_THREAD_STACK_SIZE, RT_THREAD_PRIORITY_MAX - 2, 20);
-    if (thread)
-    {
-        rt_thread_startup(thread);
-    }
-    else
-    {
-        return -RT_ENOMEM;
-    }
-
-    init_ok = RT_TRUE;
-
-    return RT_EOK;
-}
-#endif /* RT_USING_SYSTEM_WORKQUEUE */
 INIT_COMPONENT_EXPORT(ntp_auto_sync_init);
 #endif /* NTP_USING_AUTO_SYNC */
 #endif /* RT_VER_NUM > 0x40003 */
