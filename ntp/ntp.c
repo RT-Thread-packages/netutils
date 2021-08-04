@@ -422,8 +422,12 @@ static void ntp_sync_work_func(struct rt_work *work, void *work_data)
     if (ntp_check_network())
     {
         ntp_sync_to_rtc(RT_NULL);
+        rt_work_submit(work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
     }
-    rt_work_submit(work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
+    else
+    {
+        rt_work_submit(work, rt_tick_from_millisecond(5 * 1000));
+    }
 }
 
 static int ntp_auto_sync_init(void)
