@@ -406,11 +406,28 @@ time_t ntp_sync_to_rtc(const char *host_name)
 #define NTP_AUTO_SYNC_PERIOD                      (1L*60L*60L)
 #endif
 
+static rt_bool_t ntp_check_network(void)
+{
+#ifdef RT_USING_NETDEV
+    struct netdev * netdev = netdev_get_by_family(AF_INET);
+    return (netdev && netdev_is_link_up(netdev));  
+#else
+    return RT_TRUE;
+#endif
+}
+
 static struct rt_work ntp_sync_work;
 static void ntp_sync_work_func(struct rt_work *work, void *work_data)
 {
-    ntp_sync_to_rtc(RT_NULL);
-    rt_work_submit(work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
+    if (ntp_check_network())
+    {
+        ntp_sync_to_rtc(RT_NULL);
+        rt_work_submit(work, rt_tick_from_millisecond(NTP_AUTO_SYNC_PERIOD * 1000));
+    }
+    else
+    {
+        rt_work_submit(work, rt_tick_from_millisecond(5 * 1000));
+    }
 }
 
 static int ntp_auto_sync_init(void)
