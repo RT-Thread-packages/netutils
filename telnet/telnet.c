@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2021, RT-Thread Development Team
+ * Copyright (c) 2006-2022, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -325,10 +325,10 @@ static void telnet_thread(void* parameter)
     }
 
     if(setsockopt(telnet->server_fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive, sizeof(keepalive)) < 0)
-	{
+    {
         rt_kprintf("telnet:set socket keepalive failed\n");
         return;
-	}
+    }
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(TELNET_PORT);
