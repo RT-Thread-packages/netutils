@@ -410,7 +410,7 @@ static rt_bool_t ntp_check_network(void)
 {
 #ifdef RT_USING_NETDEV
     struct netdev * netdev = netdev_get_by_family(AF_INET);
-    return (netdev && netdev_is_link_up(netdev));  
+    return (netdev && netdev_is_link_up(netdev));
 #else
     return RT_TRUE;
 #endif
