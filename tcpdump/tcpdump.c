@@ -9,9 +9,12 @@
  */
 
 #include <rtthread.h>
-
 #ifdef PKG_NETUTILS_TCPDUMP
+#if RT_VER_NUM >= 0x40100
+#include <unistd.h>
+#else
 #include <dfs_posix.h>
+#endif /* RT_VER_NUM >= 0x40100 */
 #include "netif/ethernetif.h"
 #include "optparse.h"
 
