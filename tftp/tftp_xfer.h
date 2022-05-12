@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2019, RT-Thread Development Team
+ * Copyright (c) 2006-2022, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -28,7 +28,7 @@
 
 #define XFER_DATA_SIZE_MAX (512)
 
-union file_info 
+union file_info
 {
     uint16_t code;
     uint16_t block;

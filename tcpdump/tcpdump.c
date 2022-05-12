@@ -1,22 +1,7 @@
 /*
- * File      : tcpdump.c
- * This is file that captures the IP message based on the RT-Thread
- * and saves in the file system.
- * COPYRIGHT (C) 2006 - 2018, RT-Thread Development Team
+ * Copyright (c) 2006-2022, RT-Thread Development Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
@@ -24,9 +9,12 @@
  */
 
 #include <rtthread.h>
-
 #ifdef PKG_NETUTILS_TCPDUMP
+#if RT_VER_NUM >= 0x40100
+#include <unistd.h>
+#else
 #include <dfs_posix.h>
+#endif /* RT_VER_NUM >= 0x40100 */
 #include "netif/ethernetif.h"
 #include "optparse.h"
 
@@ -98,13 +86,28 @@ do {                                                            \
     (_head)->linktype = LINKTYPE_ETHERNET;                      \
 } while (0)
 
+#define PACP_ZERO_PKTHDR_CREATE(_head, _len)                    \
+do{                                                             \
+    (_head)->ts.tv_sec = 0;                                     \
+    (_head)->ts.tv_usec = 0;                                    \
+    (_head)->caplen = _len;                                     \
+    (_head)->len = _len;                                        \
+} while (0)
+
 #define PACP_PKTHDR_CREATE(_head, _p)                           \
 do{                                                             \
-    (_head)->ts.tv_sec = rt_tick_get() / RT_TICK_PER_SECOND;    \
-    (_head)->ts.tv_msec = rt_tick_get() % RT_TICK_PER_SECOND;   \
+    (_head)->ts.tv_sec = _p->tick / 1000;                       \
+    (_head)->ts.tv_usec = (_p->tick % 1000) * 1000;             \
     (_head)->caplen = _p->tot_len;                              \
     (_head)->len = _p->tot_len;                                 \
 } while (0)
+
+struct tcpdump_buf
+{
+    rt_uint16_t tot_len;
+    rt_tick_t tick;
+    void *buf;
+};
 
 struct rt_pcap_file_header
 {
@@ -120,7 +123,7 @@ struct rt_pcap_file_header
 struct rt_timeval
 {
     rt_uint32_t tv_sec;
-    rt_uint32_t tv_msec;
+    rt_uint32_t tv_usec;
 };
 
 struct rt_pcap_pkthdr
@@ -189,15 +192,22 @@ static void hex_dump(const rt_uint8_t *ptr, rt_size_t buflen)
 /* get tx data */
 static err_t _netif_linkoutput(struct netif *netif, struct pbuf *p)
 {
+    // pbuf->payload + sizeof(struct tcpdump_buf)
+    struct tcpdump_buf *tbuf = (struct tcpdump_buf *)rt_malloc(p->tot_len+sizeof(struct tcpdump_buf));
+
+    RT_ASSERT(tbuf != RT_NULL);
     RT_ASSERT(netif != RT_NULL);
+
+    tbuf->tick = rt_tick_get();
+    tbuf->buf = ((rt_uint8_t *)tbuf) + sizeof(struct tcpdump_buf);
+    tbuf->tot_len = p->tot_len;
+    pbuf_copy_partial(p, tbuf->buf, p->tot_len, 0);
 
     if (p != RT_NULL)
     {
-        pbuf_ref(p);
-
-        if (rt_mb_send(tcpdump_mb, (rt_uint32_t)p) != RT_EOK)
+        if (rt_mb_send(tcpdump_mb, (rt_uint32_t)tbuf) != RT_EOK)
         {
-            pbuf_free(p);
+            rt_free(tbuf);
         }
     }
     return link_output(netif, p);
@@ -206,14 +216,22 @@ static err_t _netif_linkoutput(struct netif *netif, struct pbuf *p)
 /* get rx data */
 static err_t _netif_input(struct pbuf *p, struct netif *inp)
 {
-    RT_ASSERT(inp != RT_NULL);
+    // pbuf->payload + sizeof(struct tcpdump_buf)
+    struct tcpdump_buf *tbuf = (struct tcpdump_buf *)rt_malloc(p->tot_len+sizeof(struct tcpdump_buf));
+
+    RT_ASSERT(tbuf != RT_NULL);
+    RT_ASSERT(netif != RT_NULL);
+
+    tbuf->tick = rt_tick_get();
+    tbuf->buf = ((rt_uint8_t *)tbuf) + sizeof(struct tcpdump_buf);
+    tbuf->tot_len = p->tot_len;
+    pbuf_copy_partial(p, tbuf->buf, p->tot_len, 0);
 
     if (p != RT_NULL)
     {
-        pbuf_ref(p);
-        if (rt_mb_send(tcpdump_mb, (rt_uint32_t)p) != RT_EOK)
+        if (rt_mb_send(tcpdump_mb, (rt_uint32_t)tbuf) != RT_EOK)
         {
-            pbuf_free(p);
+            rt_free(tbuf);
         }
     }
     return input(p, inp);
@@ -230,13 +248,13 @@ static rt_err_t rt_tcpdump_pcap_file_write(const void *buf, int len)
         return -RT_ERROR;
     }
 
-    if ((len == 0) && (fd > 0))
-    {
-        dbg_log(DBG_ERROR, "ip mess error and close file!\n");
-        close(fd);
-        fd = -1;
-        return -RT_ERROR;
-    }
+    // if ((len == 0) && (fd > 0))
+    // {
+    //     dbg_log(DBG_ERROR, "ip mess error and close file! len = %d, fd = %d\n", len, fd);
+    //     close(fd);
+    //     fd = -1;
+    //     return -RT_ERROR;
+    // }
 
     if (fd < 0)
     {
@@ -267,23 +285,22 @@ static rt_err_t rt_tcpdump_pcap_file_save(const void *buf, int len)
 }
 
 /* write ip mess and print */
-static void rt_tcpdump_ip_mess_write(struct pbuf *p)
+static void rt_tcpdump_ip_mess_write(struct tcpdump_buf *p)
 {
-    rt_uint8_t *buf = (rt_uint8_t *)rt_malloc(p->tot_len);
+    struct tcpdump_buf *tbuf = p;
 
-    RT_ASSERT(buf != RT_NULL);
-
-    pbuf_copy_partial(p, buf, p->tot_len, 0);
+    RT_ASSERT(tbuf != RT_NULL);
 
 #ifdef PKG_NETUTILS_TCPDUMP_PRINT
-    hex_dump(buf, p->tot_len);
+    hex_dump(tbuf->buf, tbuf->tot_len);
 #endif
 
     /* write ip mess */
     if (tcpdump_write != RT_NULL)
-        tcpdump_write(buf, p->tot_len);
-
-    rt_free(buf);
+    {
+        // rt_kprintf("tbuf->tot_len = %d\n", tbuf->tot_len);
+        tcpdump_write(tbuf->buf, tbuf->tot_len);
+    }
 }
 
 /* write pcap file header */
@@ -304,8 +321,23 @@ static rt_err_t rt_tcpdump_pcap_file_init(void)
     /* in rdb mode does not need to write pcap file header */
     if ((tcpdump_write != RT_NULL) && (tcpdump_write == rt_tcpdump_pcap_file_write))
     {
+        struct rt_pcap_pkthdr pkthdr;
+
+        /* pcap header */
         PACP_FILE_HEADER_CREATE(&file_header);
         res = tcpdump_write(&file_header, sizeof(file_header));
+
+        /* Positioning at time zero */
+        char pacp_zero[] =
+        {
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
+            0x08, 0x00,
+            ' ', ' ', 'R', 'T', 'T', 'H', 'R', 'E', 'A', 'D', ' ', 'Z', 'E', 'R', 'O'
+        };
+        PACP_ZERO_PKTHDR_CREATE(&pkthdr, sizeof(pacp_zero));
+        tcpdump_write(&pkthdr, sizeof(pkthdr));
+        tcpdump_write(pacp_zero, sizeof(pacp_zero));
     }
 
 #ifdef  PKG_NETUTILS_TCPDUMP_PRINT
@@ -320,30 +352,31 @@ static rt_err_t rt_tcpdump_pcap_file_init(void)
 
 static void rt_tcpdump_thread_entry(void *param)
 {
-    struct pbuf *pbuf = RT_NULL;
+    // struct pbuf *pbuf = RT_NULL;
+    struct tcpdump_buf *tbuf = RT_NULL;
     struct rt_pcap_pkthdr pkthdr;
     rt_uint32_t mbval;
 
     while (1)
     {
-        if (rt_mb_recv(tcpdump_mb, &mbval, RT_WAITING_FOREVER) == RT_EOK)
+        if (rt_mb_recv(tcpdump_mb, (rt_ubase_t *)&mbval, RT_WAITING_FOREVER) == RT_EOK)
         {
-            pbuf = (struct pbuf *)mbval;
-            RT_ASSERT(pbuf != RT_NULL);
+            tbuf = (struct tcpdump_buf *)mbval;
+            RT_ASSERT(tbuf != RT_NULL);
 
             /* write pkthdr */
             if ((tcpdump_write != RT_NULL) && (tcpdump_write == rt_tcpdump_pcap_file_write))
             {
-                PACP_PKTHDR_CREATE(&pkthdr, pbuf);
+                PACP_PKTHDR_CREATE(&pkthdr, tbuf);
                 tcpdump_write(&pkthdr, sizeof(pkthdr));
             }
 
 #ifdef  PKG_NETUTILS_TCPDUMP_PRINT
             hex_dump((rt_uint8_t *)&pkthdr, PCAP_PKTHDR_SIZE);
 #endif
-            rt_tcpdump_ip_mess_write(pbuf);
-            pbuf_free(pbuf);
-            pbuf = RT_NULL;
+            rt_tcpdump_ip_mess_write(tbuf);
+            rt_free(tbuf);
+            tbuf = RT_NULL;
         }
 
         /* tcpdump deinit, the mailbox does not receive the data, exits the thread*/
@@ -352,7 +385,7 @@ static void rt_tcpdump_thread_entry(void *param)
             dbg_log(DBG_INFO, "tcpdump stop and tcpdump thread exit!\n");
             close(fd);
             fd = -1;
-            
+
             if (tcpdump_pipe != RT_NULL)
                 rt_device_close((rt_device_t)tcpdump_pipe);
 
@@ -478,6 +511,7 @@ static int rt_tcpdump_init(void)
 static void rt_tcpdump_deinit(void)
 {
     rt_base_t level;
+    struct rt_mailbox *tcpdump_mb_tmp = RT_NULL;
 
     if (netif == RT_NULL)
     {
@@ -487,14 +521,17 @@ static void rt_tcpdump_deinit(void)
 
     /* linkoutput and input deinit */
     level = rt_hw_interrupt_disable();
+    tcpdump_mb_tmp = tcpdump_mb;
+    tcpdump_mb = RT_NULL;
     netif->linkoutput = link_output;
     netif->input = input;
     netif = RT_NULL;
     rt_hw_interrupt_enable(level);
     /* linkoutput and input deinit */
 
-    rt_mb_delete(tcpdump_mb);
-    tcpdump_mb = RT_NULL;
+    rt_thread_mdelay(10);
+    rt_mb_delete(tcpdump_mb_tmp);
+    tcpdump_mb_tmp = RT_NULL;
 }
 
 static void rt_tcpdump_help_info_print(void)
@@ -714,9 +751,7 @@ static int tcpdump_test(int argc, char *argv[])
     }
 
     rt_tcpdump_cmd_argv_deinit();
-
     res = rt_tcpdump_cmd_parse(argv, MSH_CMD);
-
     if (res == STOP)
         return RT_EOK;
 

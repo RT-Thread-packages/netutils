@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2019, RT-Thread Development Team
+ * Copyright (c) 2006-2022, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -202,9 +202,11 @@ int tftp_send_request(struct tftp_xfer *xfer, uint16_t cmd, const char *remote_f
     }
     /* Packing request packet header */
     send_packet->cmd = htons(cmd);
-    size = sprintf(send_packet->info.filename, "%s%c%s%c%d%c", remote_file, 0, xfer->mode, 0, xfer->blksize, 0) + 3;
+    size = rt_sprintf(send_packet->info.filename, "%s%c%s%c%s%c%d%c%s%c%d%c",
+        remote_file, 0, xfer->mode, 0, "blksize", 0, xfer->blksize, 0,"tsize", 0, 0, 0) + 2;
     /* send data */
-    r_size = sendto(xfer->sock, send_packet, size, 0, (struct sockaddr *)&_private->server, sizeof(struct sockaddr_in));
+    r_size = sendto(xfer->sock, send_packet, size, 0,
+        (struct sockaddr *)&_private->server, sizeof(struct sockaddr_in));
     free(send_packet);
     if (size != r_size)
     {
@@ -231,7 +233,7 @@ struct tftp_xfer *tftp_recv_request(struct tftp_xfer *xfer, struct tftp_packet *
 
     /* get packet size */
     mem_size = sizeof(struct tftp_packet);
-    memset(packet, 0, mem_size);
+    rt_memset(packet, 0, mem_size);
     /* Receiving raw data */
     size = tftp_recv_raw_data(xfer, packet, mem_size);
     if (size > 0)
@@ -246,7 +248,7 @@ struct tftp_xfer *tftp_recv_request(struct tftp_xfer *xfer, struct tftp_packet *
             if (client_xfer != NULL)
             {
                 struct tftp_xfer_private *_client_private = client_xfer->_private;
-                memcpy(&_client_private->sender, &_private->sender, sizeof(struct sockaddr_in));
+                rt_memcpy(&_client_private->sender, &_private->sender, sizeof(struct sockaddr_in));
             }
             if (ntohs(packet->cmd) == TFTP_CMD_RRQ)
             {
@@ -341,7 +343,7 @@ struct tftp_xfer *tftp_xfer_create(const char *ip_addr, int port)
         tftp_printf("can't create tftp transfer!! exit\n");
         return NULL;
     }
-    memset(xfer, 0, mem_len);
+    rt_memset(xfer, 0, mem_len);
     _private = (struct tftp_xfer_private *)&xfer[1];
 
     /* create socket */
