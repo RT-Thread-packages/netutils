@@ -314,7 +314,7 @@ void tftp_xfer_mode_set(struct tftp_xfer *xfer, const char *mode)
     {
         free(xfer->mode);
     }
-    xfer->mode = strdup(mode);
+    xfer->mode = rt_strdup(mode);
 }
 
 int tftp_xfer_blksize_set(struct tftp_xfer *xfer, int blksize)
@@ -356,11 +356,11 @@ struct tftp_xfer *tftp_xfer_create(const char *ip_addr, int port)
     }
 
     /* Initialize private data */
-    _private->ip_addr = strdup(ip_addr);
+    _private->ip_addr = rt_strdup(ip_addr);
     _private->port = port;
     _private->block = 0;
     xfer->sock = sock;
-    xfer->mode = strdup(TFTP_XFER_OCTET);
+    xfer->mode = rt_strdup(TFTP_XFER_OCTET);
     xfer->blksize = XFER_DATA_SIZE_MAX;
     xfer->_private = _private;
     return xfer;

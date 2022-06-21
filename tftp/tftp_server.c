@@ -551,7 +551,7 @@ struct tftp_server *tftp_server_create(const char *root_name, int port)
     }
     /* init server object */
     rt_memset(server, 0, mem_len);
-    server->root_name = strdup(root_name);
+    server->root_name = rt_strdup(root_name);
     if (server->root_name == NULL)
     {
         free(server);
