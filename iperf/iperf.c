@@ -28,6 +28,12 @@
 #define IPERF_MODE_SERVER   1
 #define IPERF_MODE_CLIENT   2
 
+#if (RT_VER_NUM >= 0x50000)
+#define IPERF_GET_THREAD_NAME(th) (th->parent.name)
+#else
+#define IPERF_GET_THREAD_NAME(th) (th->name)
+#endif
+
 typedef struct
 {
     int mode;
@@ -156,7 +162,7 @@ static void iperf_udp_server(void *thread_param)
             data = sentlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1);
             integer = data/1000;
             decimal = data%1000;
-            LOG_I("%s: %d.%03d0 Mbps! lost:%d total:%d\n", tid->name, integer, decimal, lost, total);
+            LOG_I("%s: %d.%03d0 Mbps! lost:%d total:%d\n", IPERF_GET_THREAD_NAME(tid), integer, decimal, lost, total);
         }
     }
     rt_free(buffer);
@@ -235,7 +241,7 @@ static void iperf_client(void *thread_param)
                 data = sentlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1);
                 integer = data/1000;
                 decimal = data%1000;
-                LOG_I("%s: %d.%03d0 Mbps!", tid->name, integer, decimal);
+                LOG_I("%s: %d.%03d0 Mbps!", IPERF_GET_THREAD_NAME(tid), integer, decimal);
                 tick1 = tick2;
                 sentlen = 0;
             }
