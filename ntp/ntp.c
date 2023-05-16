@@ -89,6 +89,17 @@ extern int closesocket(int s);
 #define VN(packet)   (rt_uint8_t) ((packet.li_vn_mode & 0x38) >> 3) /* (vn   & 00 111 000) >> 3 */
 #define MODE(packet) (rt_uint8_t) ((packet.li_vn_mode & 0x07) >> 0) /* (mode & 00 000 111) >> 0 */
 
+
+#if (RT_VER_NUM >= 0x50000)
+#define NTP_RTT_VER_MAJOR RT_VERSION_MAJOR
+#define NTP_RTT_VER_MINOR RT_VERSION_MINOR
+#define NTP_RTT_VER_PATCH RT_VERSION_PATCH
+#else
+#define NTP_RTT_VER_MAJOR RT_VERSION
+#define NTP_RTT_VER_MINOR RT_SUBVERSION
+#define NTP_RTT_VER_PATCH RT_REVISION
+#endif
+
 /* Structure that defines the 48 byte NTP packet protocol */
 typedef struct {
 
@@ -230,9 +241,9 @@ time_t ntp_get_time(const char *host_name)
             }
         }
 
-        send_data[9] = RT_VERSION;
-        send_data[10] = RT_SUBVERSION;
-        send_data[11] = RT_REVISION;
+        send_data[9] = NTP_RTT_VER_MAJOR;
+        send_data[10] = NTP_RTT_VER_MINOR;
+        send_data[11] = NTP_RTT_VER_PATCH;
         send_data[12] = (uint8_t)(SW_VER_NUM >> 24);
         send_data[13] = (uint8_t)(SW_VER_NUM >> 16);
         send_data[14] = (uint8_t)(SW_VER_NUM >> 8);
