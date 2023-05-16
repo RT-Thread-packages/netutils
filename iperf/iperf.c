@@ -354,7 +354,7 @@ void iperf_server(void *thread_param)
                 data = recvlen * RT_TICK_PER_SECOND / 125 / (tick2 - tick1);
                 integer = data/1000;
                 decimal = data%1000;
-                LOG_I("%s: %d.%03d0 Mbps!", tid->name, integer, decimal);
+                LOG_I("%s: %d.%03d0 Mbps!", IPERF_GET_THREAD_NAME(tid), integer, decimal);
                 tick1 = tick2;
                 recvlen = 0;
             }
