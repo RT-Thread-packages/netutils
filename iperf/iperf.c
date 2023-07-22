@@ -61,7 +61,8 @@ static void iperf_udp_client(void *thread_param)
     sock = socket(PF_INET, SOCK_DGRAM, 0);
     if(sock < 0)
     {
-        LOG_E("can't create socket! exit!");
+        LOG_E("can't create socket!");
+        rt_free(buffer);
         return;
     }
     server.sin_family = PF_INET;
