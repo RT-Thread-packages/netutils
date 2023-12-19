@@ -251,7 +251,7 @@ static rt_err_t telnet_close(rt_device_t dev)
     return RT_EOK;
 }
 
-static rt_size_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
+static rt_ssize_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
 {
     rt_size_t result;
 
@@ -274,7 +274,7 @@ static rt_size_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_siz
     return result;
 }
 
-static rt_size_t telnet_write (rt_device_t dev, rt_off_t pos, const void* buffer, rt_size_t size)
+static rt_ssize_t telnet_write (rt_device_t dev, rt_off_t pos, const void* buffer, rt_size_t size)
 {
     const rt_uint8_t *ptr;
 
