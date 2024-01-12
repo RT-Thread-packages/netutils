@@ -152,7 +152,7 @@ int tftp_client_push(struct tftp_client *client, const char *local_name, const c
         return res;
     }
     /* Open file */
-    fp = tftp_file_open(local_name, _private->xfer->mode, 1);
+    fp = tftp_file_open(local_name, _private->xfer->mode, 0);
     if (fp == NULL)
     {
         tftp_printf("open file \"%s\" error.\n", local_name);
