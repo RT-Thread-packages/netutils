@@ -369,11 +369,17 @@ struct tftp_xfer *tftp_xfer_create(const char *ip_addr, int port)
 void tftp_xfer_destroy(struct tftp_xfer *xfer)
 {
     struct tftp_xfer_private *_private;
-
+    if (xfer == NULL)
+    {
+        return;
+    }
     /* free all mem */
     _private = xfer->_private;
     closesocket(xfer->sock);
-    free(_private->ip_addr);
+    if (_private && _private->ip_addr)
+    {
+        free(_private->ip_addr);
+    }
     free(xfer->mode);
     free(xfer);
 }
