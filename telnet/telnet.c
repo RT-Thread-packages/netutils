@@ -58,6 +58,8 @@ static int dev_old_flag;
 #define TELNET_DO           253
 #define TELNET_DONT         254
 
+#define TELNET_OPT_ECHO     1
+
 struct telnet_session
 {
     struct rt_ringbuffer rx_ringbuffer;
@@ -164,6 +166,9 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
 
             /* don't option */
         case STATE_WILL:
+            send_option_to_client(telnet, TELNET_DO, *data);
+            telnet->state = STATE_NORMAL;
+            break;
         case STATE_WONT:
             send_option_to_client(telnet, TELNET_DONT, *data);
             telnet->state = STATE_NORMAL;
@@ -171,6 +176,9 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
 
             /* won't option */
         case STATE_DO:
+            send_option_to_client(telnet, TELNET_WILL, *data);
+            telnet->state = STATE_NORMAL;
+            break;
         case STATE_DONT:
             send_option_to_client(telnet, TELNET_WONT, *data);
             telnet->state = STATE_NORMAL;
@@ -315,6 +323,18 @@ static rt_err_t telnet_control(rt_device_t dev, int cmd, void *args)
     };
 #endif /* RT_USING_DEVICE_OPS */
 
+
+static int telnet_enable_echo(rt_int32_t fd)
+{
+    rt_uint8_t cmd_len = 3;
+    rt_uint8_t cmd_buffer[4];
+
+    cmd_buffer[0] = TELNET_IAC;
+    cmd_buffer[1] = TELNET_WILL;
+    cmd_buffer[2] = TELNET_OPT_ECHO;
+    return send(fd, cmd_buffer, cmd_len, 0);
+}
+
 /* telnet server thread entry */
 static void telnet_thread(void* parameter)
 {
@@ -412,14 +432,15 @@ static void telnet_thread(void* parameter)
         telnet->state = STATE_NORMAL;
 
         telnet->echo_mode = finsh_get_echo();
-        /* disable echo mode */
-        finsh_set_echo(0);
+        /* enable echo mode */
+        finsh_set_echo(1);
         /* output RT-Thread version and shell prompt */
 #ifdef FINSH_USING_MSH
         msh_exec("version", rt_strlen("version"));
 #endif /* FINSH_USING_MSH */
         rt_kprintf(FINSH_PROMPT);
 
+        telnet_enable_echo(telnet->client_fd);
         while (1)
         {
             /* try to send all data in tx ringbuffer */
