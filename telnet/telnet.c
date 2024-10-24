@@ -59,6 +59,7 @@ static int dev_old_flag;
 #define TELNET_DONT         254
 
 #define TELNET_OPT_ECHO     1
+#define TELNET_OPT_SGA      3
 
 struct telnet_session
 {
@@ -74,7 +75,7 @@ struct telnet_session
 
     /* telnet protocol */
     rt_uint8_t state;
-    rt_uint8_t echo_mode;
+    rt_uint8_t finsh_saved_echo_mode;
 
     rt_sem_t read_notice;
 };
@@ -164,23 +165,45 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
             }
             break;
 
-            /* don't option */
         case STATE_WILL:
-            send_option_to_client(telnet, TELNET_DO, *data);
+            if (*data == TELNET_OPT_ECHO || *data == TELNET_OPT_SGA)
+            {
+                send_option_to_client(telnet, TELNET_DO, *data);
+            }
+            else
+            {
+                send_option_to_client(telnet, TELNET_DONT, *data);
+            }
             telnet->state = STATE_NORMAL;
             break;
         case STATE_WONT:
-            send_option_to_client(telnet, TELNET_DONT, *data);
+            if (*data == TELNET_OPT_ECHO)
+            {
+                finsh_set_echo(0);
+            }
             telnet->state = STATE_NORMAL;
             break;
 
-            /* won't option */
         case STATE_DO:
-            send_option_to_client(telnet, TELNET_WILL, *data);
+            if (*data == TELNET_OPT_ECHO || *data == TELNET_OPT_SGA)
+            {
+                if (*data == TELNET_OPT_ECHO)
+                {
+                    finsh_set_echo(1);
+                }
+                send_option_to_client(telnet, TELNET_WILL, *data);
+            }
+            else
+            {
+                send_option_to_client(telnet, TELNET_WONT, *data);
+            }
             telnet->state = STATE_NORMAL;
             break;
         case STATE_DONT:
-            send_option_to_client(telnet, TELNET_WONT, *data);
+            if (*data == TELNET_OPT_ECHO)
+            {
+                finsh_set_echo(0);
+            }
             telnet->state = STATE_NORMAL;
             break;
 
@@ -188,6 +211,20 @@ static void process_rx(struct telnet_session* telnet, rt_uint8_t *data, rt_size_
             if (*data == TELNET_IAC)
             {
                 telnet->state = STATE_IAC;
+            }
+            else if (*data == '\r')
+            {
+                /*
+                 * telnet client(not busybox's telnet) will send 0d00 if not toggle crlf by default,
+                 * change them to 0d0a, so we don't have to toggle
+                 */
+                if ((index + 1) <= length)
+                {
+                    if (data[1] == 0)
+                    {
+                        data[1] = '\n';
+                    }
+                }
             }
             else if (*data != '\r') /* ignore '\r' */
             {
@@ -238,7 +275,7 @@ static void client_close(struct telnet_session* telnet)
     closesocket(telnet->client_fd);
 
     /* restore shell option */
-    finsh_set_echo(telnet->echo_mode);
+    finsh_set_echo(telnet->finsh_saved_echo_mode);
 
     rt_kprintf("telnet: resume console to %s\n", RT_CONSOLE_DEVICE_NAME);
 }
@@ -322,18 +359,6 @@ static rt_err_t telnet_control(rt_device_t dev, int cmd, void *args)
         telnet_control
     };
 #endif /* RT_USING_DEVICE_OPS */
-
-
-static int telnet_enable_echo(rt_int32_t fd)
-{
-    rt_uint8_t cmd_len = 3;
-    rt_uint8_t cmd_buffer[4];
-
-    cmd_buffer[0] = TELNET_IAC;
-    cmd_buffer[1] = TELNET_WILL;
-    cmd_buffer[2] = TELNET_OPT_ECHO;
-    return send(fd, cmd_buffer, cmd_len, 0);
-}
 
 /* telnet server thread entry */
 static void telnet_thread(void* parameter)
@@ -431,16 +456,15 @@ static void telnet_thread(void* parameter)
         /* set init state */
         telnet->state = STATE_NORMAL;
 
-        telnet->echo_mode = finsh_get_echo();
-        /* enable echo mode */
-        finsh_set_echo(1);
+        telnet->finsh_saved_echo_mode = finsh_get_echo();
+        send_option_to_client(telnet, TELNET_WILL, TELNET_OPT_ECHO);
+
         /* output RT-Thread version and shell prompt */
 #ifdef FINSH_USING_MSH
         msh_exec("version", rt_strlen("version"));
 #endif /* FINSH_USING_MSH */
         rt_kprintf(FINSH_PROMPT);
 
-        telnet_enable_echo(telnet->client_fd);
         while (1)
         {
             /* try to send all data in tx ringbuffer */
