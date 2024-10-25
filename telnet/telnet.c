@@ -28,7 +28,12 @@
 #endif /* defined(RT_USING_POSIX_STDIO) */
 
 #if defined(RT_USING_POSIX_STDIO) || defined(RT_USING_POSIX)
+#if RT_VER_NUM >= 0x50100
+#include <unistd.h>
+#include <posix/stdio.h>
+#else
 #include <libc.h>
+#endif /* RT_VER_NUM >= 0x50100 */
 static int dev_old_flag;
 #endif /* defined(RT_USING_POSIX_STDIO) || defined(RT_USING_POSIX) */
 
@@ -263,8 +268,13 @@ static void client_close(struct telnet_session* telnet)
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
     /* set finsh device */
 #if defined(RT_USING_POSIX_STDIO) || defined(RT_USING_POSIX)
+#if RT_VER_NUM >= 0x50100
+    ioctl(rt_posix_stdio_get_console(), F_SETFL, (void *) dev_old_flag);
+    rt_posix_stdio_set_console(RT_CONSOLE_DEVICE_NAME, O_RDWR);
+#else
     ioctl(libc_stdio_get_console(), F_SETFL, (void *) dev_old_flag);
     libc_stdio_set_console(RT_CONSOLE_DEVICE_NAME, O_RDWR);
+#endif /* RT_VER_NUM >= 0x50100 */
 #else
     finsh_set_device(RT_CONSOLE_DEVICE_NAME);
 #endif /* defined(RT_USING_POSIX_STDIO) || defined(RT_USING_POSIX) */
@@ -298,7 +308,7 @@ static rt_err_t telnet_close(rt_device_t dev)
 
 static rt_ssize_t telnet_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
 {
-    rt_size_t result;
+    rt_size_t result = 0;
 
     rt_sem_take(telnet->read_notice, RT_WAITING_FOREVER);
 
@@ -360,6 +370,75 @@ static rt_err_t telnet_control(rt_device_t dev, int cmd, void *args)
     };
 #endif /* RT_USING_DEVICE_OPS */
 
+#ifdef RT_USING_POSIX_STDIO
+#include <dfs_file.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+
+#ifdef RT_USING_POSIX_TERMIOS
+#include <termios.h>
+#endif
+
+/* it's possible the 'getc/putc' is defined by stdio.h in gcc/newlib. */
+#ifdef getc
+#undef getc
+#endif
+
+#ifdef putc
+#undef putc
+#endif
+
+#ifdef RT_USING_DFS_V2
+static ssize_t telnet_fops_read(struct dfs_file *fd, void *buf, size_t count, off_t *pos)
+#else
+static ssize_t telnet_fops_read(struct dfs_file *fd, void *buf, size_t count)
+#endif
+{
+    int size = 0;
+    rt_device_t device;
+    int wait_ret;
+
+    device = &telnet->device;
+
+    do
+    {
+        size = rt_device_read(device, -1,  buf, count);
+        if (size <= 0)
+        {
+            if (fd->flags & O_NONBLOCK)
+            {
+                size = -EAGAIN;
+                break;
+            }
+
+            wait_ret = rt_wqueue_wait_interruptible(&(device->wait_queue), 0, RT_WAITING_FOREVER);
+            if (wait_ret != RT_EOK)
+            {
+                break;
+            }
+        }
+    }while (size <= 0);
+
+    if (size < 0)
+    {
+        size = 0;
+    }
+    return size;
+}
+static const struct dfs_file_ops telnet_fops =
+{
+    .open   = NULL,
+    .close  = NULL,
+    .ioctl  = NULL,
+    .read   = telnet_fops_read,
+    .write  = NULL,
+    .poll   = NULL,
+};
+#endif /* RT_USING_POSIX_STDIO */
+
+
 /* telnet server thread entry */
 static void telnet_thread(void* parameter)
 {
@@ -411,6 +490,10 @@ static void telnet_thread(void* parameter)
     telnet->device.control  = telnet_control;
 #endif /* RT_USING_DEVICE_OPS */
 
+#ifdef RT_USING_POSIX_STDIO
+    telnet->device.fops = &telnet_fops;
+#endif
+
     /* no private */
     telnet->device.user_data = RT_NULL;
 
@@ -436,11 +519,19 @@ static void telnet_thread(void* parameter)
         /* set finsh device */
 #if defined(RT_USING_POSIX_STDIO) || defined(RT_USING_POSIX)
         /* backup flag */
+#if RT_VER_NUM >= 0x50100
+        dev_old_flag = ioctl(rt_posix_stdio_get_console(), F_GETFL, (void *) RT_NULL);
+        /* add non-block flag */
+        ioctl(rt_posix_stdio_get_console(), F_SETFL, (void *) (dev_old_flag | O_NONBLOCK));
+        /* set tcp shell device for console */
+        rt_posix_stdio_set_console("telnet", O_RDWR);
+#else
         dev_old_flag = ioctl(libc_stdio_get_console(), F_GETFL, (void *) RT_NULL);
         /* add non-block flag */
         ioctl(libc_stdio_get_console(), F_SETFL, (void *) (dev_old_flag | O_NONBLOCK));
         /* set tcp shell device for console */
         libc_stdio_set_console("telnet", O_RDWR);
+#endif /* RT_VER_NUM >= 0x50100 */
         /* resume finsh thread, make sure it will unblock from last device receive */
         rt_thread_t tid = rt_thread_find(FINSH_THREAD_NAME);
         if (tid)
