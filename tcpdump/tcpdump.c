@@ -102,6 +102,25 @@ do{                                                             \
     (_head)->len = _p->tot_len;                                 \
 } while (0)
 
+#if defined(RT_VERSION_CHECK)
+    #if (RTTHREAD_VERSION >= RT_VERSION_CHECK(5, 2, 0))
+        #define dbg_log(level, fmt, ...)                            \
+            if ((level) <= DBG_LEVEL)                               \
+            {                                                       \
+                switch(level)                                       \
+                {                                                   \
+                    case DBG_ERROR:   _DBG_LOG_HDR("E", 31); break; \
+                    case DBG_WARNING: _DBG_LOG_HDR("W", 33); break; \
+                    case DBG_INFO:    _DBG_LOG_HDR("I", 32); break; \
+                    case DBG_LOG:     _DBG_LOG_HDR("D", 0); break;  \
+                    default: break;                                 \
+                }                                                   \
+                rt_kprintf(fmt, ##__VA_ARGS__);                     \
+                _DBG_COLOR(0);                                      \
+            }
+    #endif
+#endif
+
 struct tcpdump_buf
 {
     rt_uint16_t tot_len;
@@ -678,12 +697,12 @@ static int rt_tcpdump_cmd_deal(struct optparse *options)
 }
 
 /* msh command-line parsing */
-static int rt_tcpdump_cmd_parse(char *argv[], const char *cmd)
+static int rt_tcpdump_cmd_parse(int argc,char *argv[], const char *cmd)
 {
     int ch, res, invalid_argv = 0;
     struct optparse options;
 
-    optparse_init(&options, argv);
+    optparse_init(&options, argc,argv);
 
     while ((ch = optparse(&options, cmd)) != -1)
     {
@@ -751,7 +770,7 @@ static int tcpdump_test(int argc, char *argv[])
     }
 
     rt_tcpdump_cmd_argv_deinit();
-    res = rt_tcpdump_cmd_parse(argv, MSH_CMD);
+    res = rt_tcpdump_cmd_parse(argc,argv, MSH_CMD);
     if (res == STOP)
         return RT_EOK;
 
