@@ -29,6 +29,14 @@
 
 #define tftp_printf printf
 
+#if defined(RT_VERSION_CHECK)
+    #if (RTTHREAD_VERSION >= RT_VERSION_CHECK(5, 0, 0))
+        #define RT_WEAK rt_weak
+    #else
+        #define RT_WEAK RT_WEAK
+    #endif
+#endif
+
 struct tftp_client
 {
     int max_retry;
