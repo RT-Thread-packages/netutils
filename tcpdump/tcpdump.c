@@ -12,6 +12,7 @@
 #ifdef PKG_NETUTILS_TCPDUMP
 #if RT_VER_NUM >= 0x40100
 #include <unistd.h>
+#include <fcntl.h>
 #else
 #include <dfs_posix.h>
 #endif /* RT_VER_NUM >= 0x40100 */
@@ -697,12 +698,12 @@ static int rt_tcpdump_cmd_deal(struct optparse *options)
 }
 
 /* msh command-line parsing */
-static int rt_tcpdump_cmd_parse(int argc,char *argv[], const char *cmd)
+static int rt_tcpdump_cmd_parse(int argc, char *argv[], const char *cmd)
 {
     int ch, res, invalid_argv = 0;
     struct optparse options;
 
-    optparse_init(&options, argc,argv);
+    optparse_init(&options, argc, argv);
 
     while ((ch = optparse(&options, cmd)) != -1)
     {
@@ -770,7 +771,7 @@ static int tcpdump_test(int argc, char *argv[])
     }
 
     rt_tcpdump_cmd_argv_deinit();
-    res = rt_tcpdump_cmd_parse(argc,argv, MSH_CMD);
+    res = rt_tcpdump_cmd_parse(argc, argv, MSH_CMD);
     if (res == STOP)
         return RT_EOK;
 
